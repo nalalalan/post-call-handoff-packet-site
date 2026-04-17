@@ -351,46 +351,55 @@
       margin-bottom: 20px;
     }
 
+    
+
+
+
+
+
     .sample-wrap {
       display: grid;
-      grid-template-columns: minmax(0, 0.94fr) minmax(360px, 0.9fr);
-      gap: 28px;
-      align-items: start;
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: 22px;
+      align-items: center;
     }
 
     .sample-copy .section-title,
     .sample-copy .section-subtitle {
-      max-width: 560px;
+      max-width: 540px;
     }
 
     .sample-copy .section-subtitle {
-      margin-bottom: 18px;
+      margin-bottom: 16px;
     }
 
     .proof-card {
-      padding: 24px;
+      padding: 22px;
     }
 
     .proof-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      margin-bottom: 18px;
+      gap: 18px;
+      margin-bottom: 14px;
     }
 
     .proof-block ul {
       margin: 0;
       padding-left: 24px;
       display: grid;
-      gap: 12px;
+      gap: 10px;
     }
 
     .proof-note {
-      padding: 16px 18px;
+      padding: 15px 16px;
       border-radius: 18px;
       background: var(--card-2);
       border: 1px solid rgba(191, 134, 81, 0.16);
     }
 
     .proof-note strong { color: var(--text); }
+
+
 
     .cta-card {
       padding: 34px;
@@ -458,6 +467,10 @@
       }
     }
 
+
+
+
+
     @media (max-width: 760px) {
       .wrap { width: min(calc(100% - 24px), var(--max)); }
 
@@ -466,37 +479,47 @@
         align-items: stretch;
         justify-content: flex-start;
         flex-wrap: wrap;
-        gap: 10px;
-        padding: 12px 0;
+        gap: 8px;
+        padding: 10px 0;
       }
 
       .brand {
         width: 100%;
+        gap: 12px;
       }
 
       .brand-name {
-        font-size: 19px;
+        font-size: 18px;
       }
 
       .nav {
         width: 100%;
         flex-wrap: wrap;
-        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px 12px;
       }
 
       .nav-links {
-        flex: 1 1 auto;
-        gap: 16px;
+        flex: 0 1 auto;
+        gap: 18px;
         font-size: 15px;
       }
 
       .nav .btn {
-        flex: 1 1 100%;
+        flex: 0 0 auto;
+        width: auto;
+        min-height: 46px;
+        padding: 0 18px;
+        border-radius: 16px;
+        font-size: 15px;
+        margin-left: auto;
       }
 
       .hero-title { font-size: clamp(46px, 15vw, 68px); }
       .section-title,
       .cta-title { font-size: clamp(38px, 12vw, 56px); }
+
       .hero-actions,
       .cta-actions {
         flex-direction: column;
@@ -505,6 +528,11 @@
 
       .btn {
         min-height: 54px;
+        width: 100%;
+      }
+
+      .hero-actions .btn,
+      .cta-actions .btn {
         width: 100%;
       }
 
@@ -517,6 +545,10 @@
       .preview-shell { padding: 16px; border-radius: 28px; }
       .preview-frame { padding: 12px; border-radius: 20px; }
     }
+
+
+
+
   </style>
 </head>
 <body>
@@ -680,23 +712,34 @@
   <script src="site-config.js"></script>
   <script>
     (function () {
-      function getCheckoutUrl() {
-        if (typeof window.PACKET_CHECKOUT_URL === 'string' && window.PACKET_CHECKOUT_URL.trim()) return window.PACKET_CHECKOUT_URL.trim();
-        if (window.SiteConfig && typeof window.SiteConfig.PACKET_CHECKOUT_URL === 'string' && window.SiteConfig.PACKET_CHECKOUT_URL.trim()) return window.SiteConfig.PACKET_CHECKOUT_URL.trim();
-        if (window.SITE_CONFIG && typeof window.SITE_CONFIG.PACKET_CHECKOUT_URL === 'string' && window.SITE_CONFIG.PACKET_CHECKOUT_URL.trim()) return window.SITE_CONFIG.PACKET_CHECKOUT_URL.trim();
+      function firstNonEmpty() {
+        for (var i = 0; i < arguments.length; i++) {
+          var value = arguments[i];
+          if (typeof value === 'string' && value.trim()) return value.trim();
+        }
         return '';
+      }
+
+      function getCheckoutUrl() {
+        return firstNonEmpty(
+          window.AO_CONFIG && window.AO_CONFIG.STRIPE_URL,
+          typeof window.PACKET_CHECKOUT_URL === 'string' ? window.PACKET_CHECKOUT_URL : '',
+          window.SiteConfig && window.SiteConfig.PACKET_CHECKOUT_URL,
+          window.SITE_CONFIG && window.SITE_CONFIG.PACKET_CHECKOUT_URL,
+          'https://buy.stripe.com/bJeaEZb4mf6de64dSi2Nq02'
+        );
       }
 
       var checkoutUrl = getCheckoutUrl();
       var links = document.querySelectorAll('.checkout-link');
+
       links.forEach(function (link) {
-        if (checkoutUrl) {
-          link.href = checkoutUrl;
-        } else {
-          link.classList.add('disabled');
-          link.setAttribute('aria-disabled', 'true');
-          link.title = 'Add PACKET_CHECKOUT_URL in site-config.js';
-        }
+        link.href = checkoutUrl;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.classList.remove('disabled');
+        link.removeAttribute('aria-disabled');
+        link.removeAttribute('title');
       });
     })();
   </script>
