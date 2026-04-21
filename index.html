@@ -1,6 +1,4 @@
-from pathlib import Path
-
-html = """<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -22,7 +20,6 @@ html = """<!DOCTYPE html>
       --shadow: 0 18px 44px rgba(20, 20, 20, 0.08);
       --radius-xl: 32px;
       --radius-lg: 24px;
-      --radius-md: 18px;
       --max: 1240px;
     }
 
@@ -39,11 +36,9 @@ html = """<!DOCTYPE html>
 
     a { color: inherit; text-decoration: none; }
     img { display: block; max-width: 100%; }
+    h1, h2, h3, p { margin: 0; }
 
-    .wrap {
-      width: min(calc(100% - 40px), var(--max));
-      margin: 0 auto;
-    }
+    .wrap { width: min(calc(100% - 40px), var(--max)); margin: 0 auto; }
 
     .topbar {
       position: sticky;
@@ -169,10 +164,8 @@ html = """<!DOCTYPE html>
 
     .hero {
       border-top: none;
-      padding: 48px 0 32px;
+      padding: 48px 0 36px;
     }
-
-    h1, h2, h3, p { margin: 0; }
 
     .eyebrow,
     .section-kicker {
@@ -232,7 +225,7 @@ html = """<!DOCTYPE html>
       font-size: 17px;
       color: var(--muted);
       letter-spacing: -0.02em;
-      max-width: 700px;
+      max-width: 720px;
     }
 
     .hero-proofline strong { color: var(--text); }
@@ -288,9 +281,7 @@ html = """<!DOCTYPE html>
       object-position: top center;
     }
 
-    .founder-section {
-      padding-top: 8px;
-    }
+    .founder-section { padding-top: 8px; }
 
     .founder-card {
       background: var(--card);
@@ -349,17 +340,15 @@ html = """<!DOCTYPE html>
     .founder-copy {
       color: var(--muted);
       font-size: 20px;
-      line-height: 1.58;
+      line-height: 1.6;
       letter-spacing: -0.02em;
       margin: 0;
-      max-width: 1020px;
     }
 
     .founder-pills {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
-      margin-top: 2px;
     }
 
     .founder-pill {
@@ -377,9 +366,7 @@ html = """<!DOCTYPE html>
       letter-spacing: -0.02em;
     }
 
-    .section-heading {
-      margin-bottom: 22px;
-    }
+    .section-heading { margin-bottom: 22px; }
 
     .section-title {
       font-size: clamp(44px, 5.2vw, 72px);
@@ -418,21 +405,14 @@ html = """<!DOCTYPE html>
     }
 
     .why-card,
-    .proof-card {
-      padding: 24px;
-    }
+    .proof-card { padding: 24px; }
 
     .why-grid,
     .proof-grid,
-    .steps-grid {
-      display: grid;
-      gap: 18px;
-    }
+    .steps-grid { display: grid; gap: 18px; }
 
     .why-grid,
-    .proof-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+    .proof-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
     .why-block h3,
     .proof-block h3,
@@ -474,9 +454,7 @@ html = """<!DOCTYPE html>
 
     .proof-note strong { color: var(--text); }
 
-    .steps-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
+    .steps-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
     .step-card {
       padding: 26px;
@@ -509,12 +487,12 @@ html = """<!DOCTYPE html>
       line-height: 0.96;
       letter-spacing: -0.06em;
       font-weight: 950;
-      max-width: 920px;
+      max-width: 820px;
     }
 
     .cta-subcopy {
       margin-top: 14px;
-      max-width: 760px;
+      max-width: 700px;
     }
 
     .cta-actions {
@@ -524,22 +502,14 @@ html = """<!DOCTYPE html>
       justify-content: center;
     }
 
-    .footer {
-      padding: 18px 0 34px;
-    }
+    .footer { padding: 18px 0 34px; }
 
-    .disabled {
-      opacity: 0.6;
-      pointer-events: none;
-    }
+    .disabled { opacity: 0.6; pointer-events: none; }
 
     @media (max-width: 1160px) {
       .hero-grid,
       .why-wrap,
-      .sample-wrap {
-        grid-template-columns: 1fr;
-      }
-
+      .sample-wrap { grid-template-columns: 1fr; }
       .preview-link img { aspect-ratio: 1.08 / 1; }
       .hero-side { order: 2; }
     }
@@ -548,22 +518,13 @@ html = """<!DOCTYPE html>
       .why-grid,
       .proof-grid,
       .steps-grid,
-      .founder-pills {
-        grid-template-columns: 1fr;
-      }
-
+      .founder-pills { grid-template-columns: 1fr; }
       .founder-header {
         grid-template-columns: 160px minmax(0, 1fr);
         gap: 18px;
         align-items: start;
       }
-
-      .founder-photo {
-        width: 160px;
-        height: 160px;
-        border-radius: 22px;
-      }
-
+      .founder-photo { width: 160px; height: 160px; border-radius: 22px; }
       .hero-title { font-size: clamp(46px, 15vw, 68px); }
       .section-title,
       .cta-title { font-size: clamp(38px, 12vw, 56px); }
@@ -571,7 +532,6 @@ html = """<!DOCTYPE html>
 
     @media (max-width: 760px) {
       .wrap { width: min(calc(100% - 24px), var(--max)); }
-
       .topbar-inner {
         min-height: auto;
         align-items: stretch;
@@ -580,16 +540,8 @@ html = """<!DOCTYPE html>
         gap: 8px;
         padding: 10px 0;
       }
-
-      .brand {
-        width: 100%;
-        gap: 12px;
-      }
-
-      .brand-name {
-        font-size: 18px;
-      }
-
+      .brand { width: 100%; gap: 12px; }
+      .brand-name { font-size: 18px; }
       .nav {
         width: 100%;
         flex-wrap: wrap;
@@ -597,13 +549,7 @@ html = """<!DOCTYPE html>
         justify-content: space-between;
         gap: 10px 12px;
       }
-
-      .nav-links {
-        flex: 0 1 auto;
-        gap: 18px;
-        font-size: 15px;
-      }
-
+      .nav-links { flex: 0 1 auto; gap: 18px; font-size: 15px; }
       .nav .btn {
         flex: 0 0 auto;
         width: auto;
@@ -613,36 +559,18 @@ html = """<!DOCTYPE html>
         font-size: 15px;
         margin-left: auto;
       }
-
       .hero-actions,
-      .cta-actions {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .btn {
-        min-height: 54px;
-        width: 100%;
-      }
-
+      .cta-actions { flex-direction: column; align-items: stretch; }
+      .btn { min-height: 54px; width: 100%; }
       .hero-actions .btn,
-      .cta-actions .btn {
-        width: 100%;
-      }
-
+      .cta-actions .btn { width: 100%; }
       .founder-card,
       .why-card,
       .proof-card,
       .step-card,
       .cta-card { padding: 22px; }
-
       .founder-header { grid-template-columns: 1fr; }
-      .founder-photo {
-        width: 190px;
-        height: 190px;
-        border-radius: 26px;
-      }
-
+      .founder-photo { width: 190px; height: 190px; border-radius: 26px; }
       .preview-shell { padding: 16px; border-radius: 28px; }
       .preview-frame { padding: 12px; border-radius: 20px; }
     }
@@ -675,12 +603,12 @@ html = """<!DOCTYPE html>
           <div class="hero-main">
             <div class="eyebrow">For teams where good client calls die in follow-up</div>
             <h1 class="hero-title">Your team already has ChatGPT. What it does not have is the after-call work done.</h1>
-            <p class="hero-copy">Any team can open ChatGPT for free. The hard part is taking rough notes from a real call and turning them into a clean recap, clear next steps, a usable follow-up draft, and a CRM-ready update without someone on the team spending another hour cleaning it all up. AO Labs does that work for you the same day.</p>
+            <p class="hero-copy">Any team can open ChatGPT for free. The hard part is taking rough notes from a real call and turning them into a clean recap, clear next steps, a usable follow-up draft, and a CRM-ready update without someone on the team spending another hour cleaning it all up. <strong>AO Labs does that work for you the same day.</strong></p>
             <div class="hero-actions">
               <a class="btn btn-primary checkout-link" href="#buy">Buy the $40 packet</a>
               <a class="btn btn-secondary" href="sample.pdf" target="_blank" rel="noopener">Open sample PDF</a>
             </div>
-            <p class="hero-proofline"><strong>You are not paying for access to ChatGPT.</strong> You are paying for the recap, next steps, follow-up draft, and CRM update to come back done the same day.</p>
+            <p class="hero-proofline"><strong>You are not paying for access to ChatGPT.</strong> You are paying for completed after-call work.</p>
           </div>
 
           <div class="hero-side">
@@ -708,11 +636,11 @@ html = """<!DOCTYPE html>
             <div>
               <div class="founder-kicker">Built by a real person</div>
               <h2 class="founder-title">Alan Pham</h2>
-              <p class="founder-role">Mechanical engineer with real industry design experience, now a robotics PhD researcher at WPI, NASA L’SPACE soft robotics researcher, and violinist.</p>
+              <p class="founder-role">Mechanical engineer, robotics PhD researcher at WPI, NASA L’SPACE soft robotics researcher, and violinist.</p>
             </div>
           </div>
 
-          <p class="founder-copy">I built AO Labs from a frustration I know personally. Before my PhD, I spent about three years working as a design/mechanical engineer in industry, dealing with real customers, managers, vendors, revisions, and all the follow-through that has to happen after a meeting if real work is actually going to move. I saw how often a good conversation would create momentum and then quietly die because the after-work was messy: recap, next steps, follow-up, CRM cleanup. That always felt stupid and avoidable to me. AO Labs is my attempt to solve that exact problem in a clean, practical way: turn rough notes from a strong call into a clear recap, next steps, follow-up draft, and CRM update the same day, so momentum does not die for boring reasons.</p>
+          <p class="founder-copy">Before my PhD, I spent about three years working as a design/mechanical engineer in industry, where a big part of the job was not just designing things but pushing real work across the line with customers, managers, vendors, and follow-through. I built AO Labs because I got tired of seeing good conversations create momentum and then quietly die because nobody wanted to own the ugly work after the call — recap, next steps, follow-up, and CRM cleanup. That always felt stupid and avoidable to me. AO Labs is my way of making sure the work after a strong call actually gets finished.</p>
 
           <div class="founder-pills">
             <div class="founder-pill">Real sample packet on the page</div>
@@ -728,7 +656,7 @@ html = """<!DOCTYPE html>
         <div>
           <div class="section-kicker">Why pay if ChatGPT is free?</div>
           <h2 class="section-title">Because “we have ChatGPT” and “the work got done” are not the same thing.</h2>
-          <p class="section-subtitle">The expensive part is not opening ChatGPT. The expensive part is having a founder, closer, or account manager spend more time cleaning up rough notes, deciding what matters, rewriting weak output, making it client-safe, drafting the follow-up, updating the CRM, and making sure anything actually moves.</p>
+          <p class="section-subtitle">The expensive part is not opening a model. The expensive part is having a founder, closer, or account manager spend more time cleaning up rough notes, deciding what matters, rewriting weak output, making it client-safe, drafting the follow-up, fixing the CRM, and making sure anything actually moves.</p>
         </div>
 
         <div class="why-card">
@@ -754,7 +682,7 @@ html = """<!DOCTYPE html>
               </ul>
             </div>
           </div>
-          <div class="proof-note"><strong>What you are paying for:</strong> not access to ChatGPT, but someone actually owning the ugly after-call work and getting it finished fast.</div>
+          <div class="proof-note"><strong>The value is not the tool.</strong> The value is that the ugly after-call work is owned, finished, and returned the same day.</div>
         </div>
       </div>
     </section>
@@ -788,7 +716,7 @@ html = """<!DOCTYPE html>
 
     <section class="section" id="sample">
       <div class="wrap sample-wrap">
-        <div>
+        <div class="sample-copy">
           <div class="section-kicker">Proof</div>
           <h2 class="section-title">Open the actual sample packet.</h2>
           <p class="section-subtitle">The sample shows the buyer-facing packet only. It leaves out operator-side notes so the buyer sees a clean deliverable instead of internal process text.</p>
@@ -892,6 +820,7 @@ html = """<!DOCTYPE html>
 </html>
 """
 
-path = Path("/mnt/data/index_final_clean.html")
-path.write_text(html, encoding="utf-8")
-print(str(path))
+path = Path('/mnt/data/index_final_clean.html')
+path.write_text(html, encoding='utf-8')
+print(path)
+PY
