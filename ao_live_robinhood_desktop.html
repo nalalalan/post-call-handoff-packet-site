@@ -9,7 +9,6 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
   <link rel="icon" type="image/x-icon" href="favicon.ico" />
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
-
   <style>
     :root{
       --bg:#0b0d12;
@@ -22,375 +21,242 @@
       --green-2:#3fe774;
       --red:#ff5b6b;
       --yellow:#f5c04e;
+      --blue:#64b5ff;
       --shadow:0 18px 48px rgba(0,0,0,.35);
       --radius:24px;
       --radius-sm:18px;
-      --max:1460px;
     }
     *{box-sizing:border-box}
-    html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-    a{text-decoration:none;color:inherit}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
+    body{padding:16px}
     button{font:inherit}
-    .page{min-height:100vh;padding:22px;display:grid;grid-template-columns:260px minmax(0,1fr);gap:20px}
-    .sidebar,.panel,.hero,.card{background:linear-gradient(180deg,var(--panel) 0%, var(--panel-2) 100%);border:1px solid var(--line);box-shadow:var(--shadow)}
-    .sidebar{border-radius:28px;padding:18px;display:grid;grid-template-rows:auto auto 1fr auto;gap:18px;position:sticky;top:22px;height:calc(100vh - 44px)}
+    .app{height:calc(100vh - 32px);display:grid;grid-template-rows:auto auto auto minmax(0,1fr);gap:14px}
+    .panel,.card,.hero{background:linear-gradient(180deg,var(--panel) 0%, var(--panel-2) 100%);border:1px solid var(--line);box-shadow:var(--shadow)}
+    .topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
     .brand{display:flex;align-items:center;gap:12px}
     .logo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:rgba(0,200,5,.12);border:1px solid rgba(0,200,5,.18);color:var(--green-2);font-weight:900;letter-spacing:-.04em}
-    .brand h1{margin:0;font-size:18px;line-height:1;font-weight:850;letter-spacing:-.04em}
-    .brand p{margin:4px 0 0;font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
-    .status-pill{display:inline-flex;align-items:center;gap:9px;padding:10px 12px;border-radius:999px;background:rgba(255,255,255,.02);border:1px solid var(--line);font-size:12px;color:var(--muted);width:max-content}
-    .dot{width:8px;height:8px;border-radius:999px;background:var(--green);box-shadow:0 0 0 4px rgba(0,200,5,.12)}
-    .nav{display:grid;gap:10px}
-    .navbtn{border:none;background:transparent;color:var(--muted);text-align:left;padding:12px 12px;border-radius:14px;cursor:pointer;font-size:14px;font-weight:700}
-    .navbtn.active,.navbtn:hover{background:rgba(0,200,5,.10);color:var(--green-2)}
-    .sidebar-meta{display:grid;gap:12px;align-content:end}
-    .small-kicker{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-    .small-value{font-size:20px;font-weight:800;letter-spacing:-.04em}
-    .main{display:grid;gap:20px;align-content:start}
-    .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px}
-    .topbar h2{margin:0;font-size:30px;font-weight:850;letter-spacing:-.05em}
-    .topbar p{margin:6px 0 0;color:var(--muted);font-size:14px}
-    .top-actions{display:flex;gap:10px;flex-wrap:wrap}
-    .btn{border:none;border-radius:16px;padding:12px 14px;font-size:13px;font-weight:800;cursor:pointer}
+    .brand h1{margin:0;font-size:26px;line-height:1;font-weight:850;letter-spacing:-.05em}
+    .brand p{margin:6px 0 0;color:var(--muted);font-size:14px}
+    .actions{display:flex;gap:10px;flex-wrap:wrap}
+    .btn{border:none;border-radius:14px;padding:11px 14px;font-size:13px;font-weight:800;cursor:pointer}
     .btn-primary{background:rgba(0,200,5,.14);color:var(--green-2);border:1px solid rgba(0,200,5,.18)}
     .btn-ghost{background:rgba(255,255,255,.02);color:var(--text);border:1px solid var(--line)}
-    .hero{border-radius:28px;padding:22px 22px 18px;display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:20px;align-items:start}
-    .hero .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
-    .hero .value{font-size:64px;line-height:.92;font-weight:900;letter-spacing:-.07em;margin:0 0 10px;font-variant-numeric:tabular-nums}
-    .hero .sub{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:14px}
-    .hero-side{display:grid;gap:12px}
-    .mini-stat{border:1px solid var(--line);border-radius:20px;padding:14px;background:rgba(255,255,255,.02)}
-    .mini-stat .k{font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px}
-    .mini-stat .v{font-size:24px;line-height:1.05;font-weight:850;letter-spacing:-.05em;font-variant-numeric:tabular-nums}
-    .mini-stat .s{margin-top:8px;color:var(--muted);font-size:13px;line-height:1.35}
-    .chart-wrap{margin-top:16px;padding:14px;border-radius:22px;border:1px solid rgba(255,255,255,.05);background:rgba(255,255,255,.02)}
-    .chart-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
-    .chart-title{font-size:13px;color:var(--muted)}
-    .tabs{display:flex;gap:8px;flex-wrap:wrap}
-    .tab{border:none;border-radius:999px;padding:8px 12px;background:#171d27;color:var(--muted);font-size:12px;font-weight:800;cursor:pointer}
-    .tab.active{background:rgba(0,200,5,.14);color:var(--green-2)}
-    svg{display:block;width:100%;height:240px}
-    .axis{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-top:6px}
-    .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
-    .card{border-radius:22px;padding:16px}
-    .card .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
-    .card .v{font-size:32px;line-height:1;font-weight:850;letter-spacing:-.05em;font-variant-numeric:tabular-nums}
-    .card .s{margin-top:8px;color:var(--muted);font-size:13px;line-height:1.35}
-    .double{display:grid;grid-template-columns:1.15fr .85fr;gap:20px}
-    .triple{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
-    .activity-list{display:grid;gap:10px}
-    .activity-item{padding:12px 14px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.02)}
-    .activity-top{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--muted);margin-bottom:6px}
-    .activity-title{font-size:14px;font-weight:800;letter-spacing:-.02em;margin-bottom:4px}
-    .activity-sub{font-size:12px;color:var(--muted);line-height:1.35;margin-bottom:6px;word-break:break-word}
-    .activity-preview{font-size:13px;line-height:1.45;color:var(--text)}
-    .routing-grid{display:grid;gap:10px}
-    .panel{border-radius:26px;padding:18px}
-    .panel h3{margin:0 0 14px;font-size:16px;letter-spacing:-.03em}
-    .bars{display:grid;gap:12px}
-    .barrow{display:grid;gap:6px}
-    .barname{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+
+    .hero{border-radius:26px;padding:16px 18px;display:grid;grid-template-columns:1.2fr .8fr;gap:14px;align-items:center}
+    .hero-left{display:grid;gap:10px}
+    .eyebrow{font-size:12px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase}
+    .hero-row{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap}
+    .hero-value{font-size:52px;line-height:.9;font-weight:900;letter-spacing:-.07em;font-variant-numeric:tabular-nums}
+    .hero-status{display:flex;gap:10px;flex-wrap:wrap}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.02);color:var(--muted);font-size:12px;font-weight:700}
+    .dot{width:8px;height:8px;border-radius:999px;background:var(--green);box-shadow:0 0 0 4px rgba(0,200,5,.12)}
+    .hero-right{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .hero-mini{padding:12px 14px;border-radius:18px;border:1px solid var(--line);background:rgba(255,255,255,.02)}
+    .hero-mini .k{font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
+    .hero-mini .v{font-size:22px;font-weight:850;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+    .hero-mini .s{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.35}
+
+    .focus-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+    .card{border-radius:22px;padding:16px 16px 14px;display:grid;gap:10px;min-height:145px}
+    .card .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+    .card .value{font-size:42px;line-height:.95;font-weight:900;letter-spacing:-.06em;font-variant-numeric:tabular-nums}
+    .card .sub{font-size:13px;color:var(--muted);line-height:1.35}
+    .card .foot{margin-top:auto;font-size:12px;color:var(--muted)}
+    .accent-green{box-shadow:var(--shadow), inset 0 0 0 1px rgba(0,200,5,.12)}
+    .accent-blue{box-shadow:var(--shadow), inset 0 0 0 1px rgba(100,181,255,.12)}
+    .accent-yellow{box-shadow:var(--shadow), inset 0 0 0 1px rgba(245,192,78,.12)}
+    .accent-red{box-shadow:var(--shadow), inset 0 0 0 1px rgba(255,91,107,.12)}
+
+    .bottom-grid{min-height:0;display:grid;grid-template-columns:1.1fr 1.1fr .8fr;gap:12px}
+    .panel{border-radius:22px;padding:14px;display:grid;grid-template-rows:auto minmax(0,1fr)}
+    .panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+    .panel h3{margin:0;font-size:15px;letter-spacing:-.03em}
+    .tiny{font-size:12px;color:var(--muted)}
+    .panel-body{min-height:0;overflow:auto}
+    .activity-list{display:grid;gap:8px}
+    .activity-item{padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.02)}
+    .activity-top{display:flex;justify-content:space-between;gap:12px;font-size:11px;color:var(--muted);margin-bottom:5px}
+    .activity-title{font-size:13px;font-weight:800;letter-spacing:-.02em;margin-bottom:4px}
+    .activity-sub{font-size:11px;color:var(--muted);line-height:1.3;margin-bottom:6px;word-break:break-word}
+    .activity-preview{font-size:12px;line-height:1.4;color:var(--text)}
+    .stack{display:grid;gap:10px}
+    .mini-row{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.02);font-size:13px}
+    .mini-row .left{color:var(--muted)}
+    .bars{display:grid;gap:10px}
+    .barrow{display:grid;gap:5px}
+    .barname{display:flex;justify-content:space-between;gap:10px;font-size:12px}
     .barname span:first-child{color:var(--muted)}
-    .track{height:10px;border-radius:999px;background:#0d1117;border:1px solid rgba(255,255,255,.05);overflow:hidden}
+    .track{height:9px;border-radius:999px;background:#0d1117;border:1px solid rgba(255,255,255,.05);overflow:hidden}
     .fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--green),var(--green-2))}
-    .rows{display:grid;gap:12px}
-    .row{display:flex;justify-content:space-between;gap:12px;font-size:14px}
-    .row .left{color:var(--muted)}
-    .statusline{margin-top:14px;color:var(--muted);font-size:12px;line-height:1.45;min-height:40px}
+    .statusline{font-size:12px;line-height:1.45;color:var(--muted)}
     .good{color:var(--green-2)}
     .bad{color:var(--red)}
     .warn{color:var(--yellow)}
-    @media (max-width:1100px){
-      .page{grid-template-columns:1fr}
-      .sidebar{position:static;height:auto;grid-template-rows:auto auto auto auto}
+    @media (max-width:1360px){
+      html,body{overflow:auto}
+      .app{height:auto;min-height:calc(100vh - 32px)}
+      .focus-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+      .bottom-grid{grid-template-columns:1fr}
       .hero{grid-template-columns:1fr}
-      .grid{grid-template-columns:1fr 1fr}
-      .double{grid-template-columns:1fr}
-      .triple{grid-template-columns:1fr}
     }
-    @media (max-width:720px){
-      .page{padding:14px}
-      .hero .value{font-size:48px}
-      .grid{grid-template-columns:1fr}
-      .topbar{flex-direction:column;align-items:flex-start}
+    @media (max-width:880px){
+      .focus-grid{grid-template-columns:1fr 1fr}
+      .hero-right{grid-template-columns:1fr 1fr}
+      .topbar{flex-direction:column}
+    }
+    @media (max-width:620px){
+      .focus-grid{grid-template-columns:1fr}
+      .hero-right{grid-template-columns:1fr}
+      body{padding:10px}
+      .app{gap:10px}
+      .hero-value{font-size:40px}
+      .card .value{font-size:34px}
     }
   </style>
 </head>
 <body>
-  <div class="page">
-    <aside class="sidebar">
-      <div>
-        <div class="brand">
-          <div class="logo">AO</div>
-          <div>
-            <h1>AO Live</h1>
-            <p>desktop market view</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="status-pill"><span class="dot"></span><span id="liveState">connecting</span></div>
-
-      <div class="nav">
-        <button class="navbtn active">Overview</button>
-        <button class="navbtn">Outreach</button>
-        <button class="navbtn">Money</button>
-        <button class="navbtn">Senders</button>
-      </div>
-
-      <div class="sidebar-meta">
+  <div class="app">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo">AO</div>
         <div>
-          <div class="small-kicker">Market status</div>
-          <div class="small-value" id="marketStatus">CLOSED</div>
-        </div>
-        <div>
-          <div class="small-kicker">Next likely tick</div>
-          <div class="small-value mono" id="nextSendSide">--:--</div>
+          <h1>AO Live</h1>
+          <p>One-screen view of the only signals that matter.</p>
         </div>
       </div>
-    </aside>
+      <div class="actions">
+        <button class="btn btn-ghost" id="refreshBtn">Refresh now</button>
+        <button class="btn btn-primary" id="copyBtn">Copy status</button>
+      </div>
+    </div>
 
-    <main class="main">
-      <div class="topbar">
-        <div>
-          <h2>AO Live Market</h2>
-          <p>Watch sends, money, and the real cold-email session window.</p>
+    <section class="hero">
+      <div class="hero-left">
+        <div class="eyebrow">Main score</div>
+        <div class="hero-row">
+          <div class="hero-value" id="heroValue">$0.00</div>
+          <div class="hero-status">
+            <div class="pill"><span class="dot"></span><span id="liveState">connecting</span></div>
+            <div class="pill" id="marketPill">Window --</div>
+            <div class="pill" id="lastUpdatedPill">Last update --:--:--</div>
+          </div>
         </div>
-        <div class="top-actions">
-          <button class="btn btn-ghost" id="refreshBtn">Refresh now</button>
-          <button class="btn btn-primary" id="copyBtn">Copy status</button>
+        <div class="statusline" id="statusLine">Booting…</div>
+      </div>
+      <div class="hero-right">
+        <div class="hero-mini">
+          <div class="k">Reply mailbox</div>
+          <div class="v" id="replyMailbox">--</div>
+          <div class="s" id="replyToMeta">reply-to route</div>
+        </div>
+        <div class="hero-mini">
+          <div class="k">Sender split</div>
+          <div class="v" id="senderSummaryTop">--</div>
+          <div class="s">today's actual sender usage</div>
+        </div>
+        <div class="hero-mini">
+          <div class="k">Money today</div>
+          <div class="v" id="moneyTodayMini">$0.00</div>
+          <div class="s" id="moneyTodayMiniSub">0 payments</div>
+        </div>
+        <div class="hero-mini">
+          <div class="k">Next likely tick</div>
+          <div class="v" id="nextTick">--:--</div>
+          <div class="s" id="nextTickSub">waiting</div>
         </div>
       </div>
+    </section>
 
-      <section class="hero">
-        <div>
-          <div class="label">Portfolio value</div>
-          <div class="value mono" id="heroValue">$0</div>
-          <div class="sub">
-            <span id="heroSubA">today $0</span>
-            <span id="heroSubB">week $0</span>
-            <span id="heroSubC">month $0</span>
-          </div>
-
-          <div class="chart-wrap">
-            <div class="chart-head">
-              <div class="chart-title" id="chartTitle">sent today</div>
-              <div class="tabs">
-                <button class="tab active" data-metric="sent">Sent</button>
-                <button class="tab" data-metric="due">Due</button>
-                <button class="tab" data-metric="money">Money</button>
-              </div>
-            </div>
-            <svg id="chart" viewBox="0 0 720 240" preserveAspectRatio="none"></svg>
-            <div class="axis"><span>older</span><span>now</span></div>
-          </div>
-        </div>
-
-        <div class="hero-side">
-          <div class="mini-stat">
-            <div class="k">Session hours</div>
-            <div class="v mono" id="sessionHours">09:30–11:30</div>
-            <div class="s" id="sessionTz">America/New_York</div>
-          </div>
-          <div class="mini-stat">
-            <div class="k">Next open</div>
-            <div class="v mono" id="marketOpen">--:--</div>
-            <div class="s" id="openReason">cold sends only during session</div>
-          </div>
-          <div class="mini-stat">
-            <div class="k">Next likely tick</div>
-            <div class="v mono" id="nextSend">--:--</div>
-            <div class="s" id="nextOps">ops --:--</div>
-          </div>
-          <div class="mini-stat">
-            <div class="k">Next close</div>
-            <div class="v mono" id="marketClose">--:--</div>
-            <div class="s" id="marketCloseReason">window end</div>
-          </div>
-        </div>
-      </section>
-
-      <div class="grid">
-        <div class="card">
-          <div class="k">Sent today</div>
-          <div class="v mono" id="sentToday">0</div>
-          <div class="s mono" id="sentMeta">0 / 0 cap</div>
-        </div>
-        <div class="card">
-          <div class="k">Replies today</div>
-          <div class="v mono" id="repliesToday">0</div>
-          <div class="s" id="replyMeta">waiting for signal</div>
-        </div>
-        <div class="card">
-          <div class="k">Due now</div>
-          <div class="v mono" id="dueNow">0</div>
-          <div class="s mono" id="sequenceMeta">0 in sequence</div>
-        </div>
-        <div class="card">
-          <div class="k">Mailboxes</div>
-          <div class="v mono" id="mailboxes">0</div>
-          <div class="s mono" id="mailboxMeta">0 per mailbox</div>
-        </div>
+    <section class="focus-grid">
+      <div class="card accent-green">
+        <div class="label">1. Replies</div>
+        <div class="value" id="repliesToday">0</div>
+        <div class="sub" id="repliesSub">today</div>
+        <div class="foot" id="repliesFoot">watch this first</div>
       </div>
-
-      <div class="double">
-        <section class="panel">
-          <h3>Sender split</h3>
-          <div class="bars" id="senderBars"></div>
-        </section>
-
-        <section class="panel">
-          <h3>Money flow</h3>
-          <div class="rows">
-            <div class="row mono"><div class="left">Today</div><div id="moneyToday">$0 · 0 payments</div></div>
-            <div class="row mono"><div class="left">Week</div><div id="moneyWeek">$0 · 0 payments</div></div>
-            <div class="row mono"><div class="left">Month</div><div id="moneyMonth">$0 · 0 payments</div></div>
-          </div>
-          <div class="statusline" id="statusLine">Booting…</div>
-        </section>
+      <div class="card accent-blue">
+        <div class="label">2. Money</div>
+        <div class="value" id="moneyToday">$0.00</div>
+        <div class="sub" id="moneySub">today · 0 payments</div>
+        <div class="foot" id="moneyFoot">week $0.00 · month $0.00</div>
       </div>
+      <div class="card accent-green">
+        <div class="label">3. Sends</div>
+        <div class="value" id="sentToday">0</div>
+        <div class="sub" id="sentSub">0 / 0 cap</div>
+        <div class="foot" id="sentFoot">sender split --</div>
+      </div>
+      <div class="card accent-yellow">
+        <div class="label">4. Queue pressure</div>
+        <div class="value" id="dueNow">0</div>
+        <div class="sub" id="queueSub">due now</div>
+        <div class="foot" id="queueFoot">0 in sequence</div>
+      </div>
+      <div class="card accent-red">
+        <div class="label">5. Window / cap</div>
+        <div class="value" id="windowValue">--</div>
+        <div class="sub" id="windowSub">window --</div>
+        <div class="foot" id="windowFoot">cap --</div>
+      </div>
+    </section>
 
-      <div class="triple">
-        <section class="panel">
-          <h3>Email routing</h3>
-          <div class="routing-grid">
-            <div class="row mono"><div class="left">Reply-To</div><div id="replyToEmail">--</div></div>
-            <div class="row mono"><div class="left">IMAP mailbox</div><div id="replyMailbox">--</div></div>
-            <div class="row mono"><div class="left">Provider</div><div id="outboundProvider">--</div></div>
-            <div class="row mono"><div class="left">Last senders</div><div id="senderSummary">--</div></div>
-          </div>
-        </section>
-
-        <section class="panel">
+    <section class="bottom-grid">
+      <div class="panel">
+        <div class="panel-head">
           <h3>Recent sent emails</h3>
+          <div class="tiny">latest outbound</div>
+        </div>
+        <div class="panel-body">
           <div class="activity-list" id="recentSentList"></div>
-        </section>
-
-        <section class="panel">
-          <h3>Recent replies</h3>
-          <div class="activity-list" id="recentReplyList"></div>
-        </section>
+        </div>
       </div>
-    </main>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Recent replies</h3>
+          <div class="tiny">latest inbound</div>
+        </div>
+        <div class="panel-body">
+          <div class="activity-list" id="recentReplyList"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Quick details</h3>
+          <div class="tiny">secondary info</div>
+        </div>
+        <div class="panel-body stack">
+          <div class="mini-row"><div class="left">Reply-To</div><div id="replyToEmail">--</div></div>
+          <div class="mini-row"><div class="left">Provider</div><div id="outboundProvider">--</div></div>
+          <div class="mini-row"><div class="left">Configured mailboxes</div><div id="mailboxes">0</div></div>
+          <div class="mini-row"><div class="left">Per-mailbox cap</div><div id="perMailboxCap">0</div></div>
+          <div class="mini-row"><div class="left">Week money</div><div id="moneyWeek">$0.00</div></div>
+          <div class="mini-row"><div class="left">Month money</div><div id="moneyMonth">$0.00</div></div>
+          <div class="bars" id="senderBars"></div>
+        </div>
+      </div>
+    </section>
   </div>
 
   <script>
     const STATUS_URL = "https://alan-operator-backend-production.up.railway.app/custom-outreach/status";
     const MONEY_URL  = "https://alan-operator-backend-production.up.railway.app/ops/money-summary";
-    const STORAGE_KEY = "ao_live_desktop_history_v2";
-    let metric = "sent";
     let lastPayload = null;
 
     function $(id){ return document.getElementById(id); }
 
-    function fmtTime(date){
-      return date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-    }
-
-    function fmtTimeShort(date){
-      return date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    }
+    function fmtMoney(v){ return `$${Number(v || 0).toFixed(2)}`; }
+    function fmtTime(date){ return date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}); }
+    function fmtShort(date){ return date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
 
     function nextBoundary(minutes, fromDate = new Date()){
       const d = new Date(fromDate);
-      d.setSeconds(0);
-      d.setMilliseconds(0);
+      d.setSeconds(0, 0);
       let add = minutes - (fromDate.getMinutes() % minutes);
       if (add === minutes && fromDate.getSeconds() === 0) add = 0;
       d.setMinutes(fromDate.getMinutes() + add);
       return d;
-    }
-
-    function loadHistory(){
-      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
-      catch { return []; }
-    }
-
-    function saveHistory(history){
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(-800)));
-    }
-
-    function pushHistory(status, money){
-      const history = loadHistory();
-      history.push({
-        t: Date.now(),
-        sent: Number(status.sent_today || 0),
-        due: Number(status.due_now_count || 0),
-        money: Number((money.week && money.week.gross_usd) || 0)
-      });
-      saveHistory(history);
-    }
-
-    function pickSeries(history){
-      if(metric === "sent") return history.map(x => x.sent);
-      if(metric === "due") return history.map(x => x.due);
-      return history.map(x => x.money);
-    }
-
-    function drawChart(){
-      const svg = $("chart");
-      const history = loadHistory().slice(-80);
-      const values = pickSeries(history);
-      const titleMap = { sent:"sent today", due:"due now", money:"week money" };
-      $("chartTitle").textContent = titleMap[metric];
-
-      const width = 720, height = 240, pad = 14;
-      if(values.length < 2 || values.every(v => Number(v) === Number(values[0] || 0))){
-        svg.innerHTML = `
-          <defs>
-            <linearGradient id="lineGrad" x1="0" x2="1">
-              <stop offset="0%" stop-color="#00c805"/>
-              <stop offset="100%" stop-color="#19e06e"/>
-            </linearGradient>
-          </defs>
-          <path d="M 16 ${height-28} L ${width-16} ${height-28}" stroke="url(#lineGrad)" stroke-width="5" stroke-linecap="round" fill="none"></path>
-        `;
-        return;
-      }
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-      const range = max - min || 1;
-      const pts = values.map((v, i) => {
-        const x = pad + (i * ((width - pad*2) / (values.length - 1)));
-        const y = height - pad - (((v - min) / range) * (height - pad*2));
-        return [x, y];
-      });
-      const line = pts.map((p, i) => `${i===0?'M':'L'} ${p[0]} ${p[1]}`).join(" ");
-      const area = `${line} L ${pts[pts.length-1][0]} ${height-pad} L ${pts[0][0]} ${height-pad} Z`;
-
-      svg.innerHTML = `
-        <defs>
-          <linearGradient id="lineGrad" x1="0" x2="1">
-            <stop offset="0%" stop-color="#00c805"/>
-            <stop offset="100%" stop-color="#19e06e"/>
-          </linearGradient>
-          <linearGradient id="fillGrad" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stop-color="rgba(0,200,5,.28)"/>
-            <stop offset="100%" stop-color="rgba(0,200,5,0)"/>
-          </linearGradient>
-        </defs>
-        <path d="${area}" fill="url(#fillGrad)"></path>
-        <path d="${line}" fill="none" stroke="url(#lineGrad)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
-      `;
-    }
-
-    function renderSenderBars(counts){
-      const el = $("senderBars");
-      const entries = Object.entries(counts || {});
-      if(!entries.length){
-        el.innerHTML = `<div class="row"><div class="left">none yet</div><div>—</div></div>`;
-        return;
-      }
-      const max = Math.max(...entries.map(x => Number(x[1]||0)), 1);
-      el.innerHTML = entries.map(([name, value]) => {
-        const pct = Math.max(4, Math.round((Number(value||0)/max)*100));
-        return `
-          <div class="barrow">
-            <div class="barname"><span>${name}</span><span class="mono">${value}</span></div>
-            <div class="track"><div class="fill" style="width:${pct}%"></div></div>
-          </div>
-        `;
-      }).join("");
     }
 
     function getWindowFromStatus(status){
@@ -399,16 +265,12 @@
         const end = new Date(status.send_window_end_local);
         const tz = status.send_window_timezone || "America/New_York";
         const isOpen = Boolean(status.send_window_is_open);
-        return { start, end, tz, isOpen, source: "backend" };
+        return { start, end, tz, isOpen };
       }
-
       const now = new Date();
-      const start = new Date(now);
-      start.setHours(9, 30, 0, 0);
-      const end = new Date(now);
-      end.setHours(11, 30, 0, 0);
-      const isOpen = now >= start && now < end;
-      return { start, end, tz: "America/New_York", isOpen, source: "fallback" };
+      const start = new Date(now); start.setHours(9,30,0,0);
+      const end = new Date(now); end.setHours(17,0,0,0);
+      return { start, end, tz: "America/New_York", isOpen: now >= start && now < end };
     }
 
     function addDays(date, days){
@@ -423,42 +285,34 @@
       const cap = Number(status.daily_send_cap || 0);
       const due = Number(status.due_now_count || 0);
       const win = getWindowFromStatus(status);
-
       let nextOpen = win.start;
       let nextClose = win.end;
 
       if (now >= win.end) {
         nextOpen = addDays(win.start, 1);
         nextClose = addDays(win.end, 1);
-      }
-
-      if (now < win.start) {
+      } else if (now < win.start) {
         nextOpen = win.start;
         nextClose = win.end;
       }
 
       let label = "CLOSED";
       let reason = "outside send window";
-
       if (sent >= cap && cap > 0) {
-        label = "CLOSED";
-        reason = "daily cap hit";
+        label = "CAP HIT";
+        reason = "daily send cap reached";
       } else if (!win.isOpen) {
         label = "CLOSED";
         reason = "outside send window";
       } else if (due <= 0) {
         label = "IDLE";
-        reason = "no leads are due right now";
+        reason = "no leads due right now";
       } else {
         label = "OPEN";
-        reason = "eligible to send on the next 5-minute tick";
+        reason = "eligible to send";
       }
 
-      let nextTick = nextOpen;
-      if (label === "OPEN") {
-        nextTick = nextBoundary(5, now);
-      }
-
+      const nextTick = label === "OPEN" ? nextBoundary(5, now) : nextOpen;
       return { label, reason, nextOpen, nextClose, nextTick, win };
     }
 
@@ -490,7 +344,7 @@
         el.innerHTML = `<div class="activity-item"><div class="activity-title">none yet</div><div class="activity-sub">No events logged.</div></div>`;
         return;
       }
-      el.innerHTML = items.slice(0, 6).map(item => {
+      el.innerHTML = items.slice(0, 5).map(item => {
         const when = humanAgo(item.created_at);
         const company = item.company_name || item.from_name || item.from_email || item.to_email || "unknown";
         const address = incoming ? (item.from_email || "") : (item.to_email || "");
@@ -508,52 +362,75 @@
       }).join("");
     }
 
+    function renderSenderBars(counts){
+      const el = $("senderBars");
+      const entries = Object.entries(counts || {});
+      if(!entries.length){
+        el.innerHTML = `<div class="mini-row"><div class="left">Sender split</div><div>none yet</div></div>`;
+        return;
+      }
+      const max = Math.max(...entries.map(x => Number(x[1]||0)), 1);
+      el.innerHTML = entries.map(([name, value]) => {
+        const pct = Math.max(4, Math.round((Number(value||0)/max)*100));
+        return `
+          <div class="barrow">
+            <div class="barname"><span>${escapeHtml(name)}</span><span>${escapeHtml(value)}</span></div>
+            <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+          </div>
+        `;
+      }).join("");
+    }
+
     function render(status, money){
       lastPayload = {status, money};
-
       const session = sessionState(status);
-      $("liveState").textContent = "live";
-      $("marketStatus").textContent = session.label;
-      $("marketOpen").textContent = fmtTimeShort(session.nextOpen);
-      $("openReason").textContent = `next session open · ${session.win.tz}`;
-      $("nextSend").textContent = fmtTime(session.nextTick);
-      $("nextSendSide").textContent = fmtTime(session.nextTick);
-      $("nextOps").textContent = `ops ${fmtTime(nextBoundary(15))}`;
-      $("marketClose").textContent = fmtTimeShort(session.nextClose);
-      $("marketCloseReason").textContent = session.reason;
-      $("sessionHours").textContent = `${fmtTimeShort(session.win.start)}–${fmtTimeShort(session.win.end)}`;
-      $("sessionTz").textContent = `${session.win.tz} · ${session.win.source === "backend" ? "live backend window" : "fallback window"}`;
+      const senderSummary = Object.entries(status.sender_counts_today || {}).map(([k,v]) => `${k}:${v}`).join(" · ") || "none yet";
+      const paymentsToday = Number(money.today?.payments_count || 0);
 
-      $("heroValue").textContent = `$${Number(money.week?.gross_usd || 0).toFixed(2)}`;
-      $("heroSubA").textContent = `today $${Number(money.today?.gross_usd || 0).toFixed(2)}`;
-      $("heroSubB").textContent = `week $${Number(money.week?.gross_usd || 0).toFixed(2)}`;
-      $("heroSubC").textContent = `month $${Number(money.month?.gross_usd || 0).toFixed(2)}`;
+      $("liveState").textContent = "live";
+      $("marketPill").textContent = `${session.label} · ${session.reason}`;
+      $("lastUpdatedPill").textContent = `Last update ${fmtTime(new Date())}`;
+      $("heroValue").textContent = fmtMoney(money.today?.gross_usd || 0);
+      $("replyMailbox").textContent = status.reply_mailbox_address || "--";
+      $("replyToMeta").textContent = `Reply-To ${status.reply_to_email || '--'}`;
+      $("senderSummaryTop").textContent = senderSummary;
+      $("moneyTodayMini").textContent = fmtMoney(money.today?.gross_usd || 0);
+      $("moneyTodayMiniSub").textContent = `${paymentsToday} payment${paymentsToday === 1 ? '' : 's'}`;
+      $("nextTick").textContent = fmtShort(session.nextTick);
+      $("nextTickSub").textContent = session.label === "OPEN" ? `next send tick · ${session.win.tz}` : `next open ${fmtShort(session.nextOpen)} · ${session.win.tz}`;
+
+      $("repliesToday").textContent = status.replies_today ?? 0;
+      $("repliesSub").textContent = `${status.replies_today ?? 0} today`;
+      $("repliesFoot").textContent = (status.replies_today ?? 0) > 0 ? "real signal present" : "watch this first";
+
+      $("moneyToday").textContent = fmtMoney(money.today?.gross_usd || 0);
+      $("moneySub").textContent = `today · ${paymentsToday} payment${paymentsToday === 1 ? '' : 's'}`;
+      $("moneyFoot").textContent = `week ${fmtMoney(money.week?.gross_usd || 0)} · month ${fmtMoney(money.month?.gross_usd || 0)}`;
 
       $("sentToday").textContent = status.sent_today ?? 0;
-      $("sentMeta").textContent = `${status.sent_today ?? 0} / ${status.daily_send_cap ?? 0} cap`;
-      $("repliesToday").textContent = status.replies_today ?? 0;
-      $("replyMeta").textContent = (status.replies_today ?? 0) > 0 ? "real signal" : "waiting for signal";
-      $("dueNow").textContent = status.due_now_count ?? 0;
-      $("sequenceMeta").textContent = `${status.in_sequence_count ?? 0} in sequence`;
-      $("mailboxes").textContent = status.smtp_mailboxes_configured ?? 0;
-      $("mailboxMeta").textContent = `${status.per_mailbox_daily_cap ?? 0} per mailbox`;
+      $("sentSub").textContent = `${status.sent_today ?? 0} / ${status.daily_send_cap ?? 0} cap`;
+      $("sentFoot").textContent = `sender split ${senderSummary}`;
 
-      $("moneyToday").textContent = `$${Number(money.today?.gross_usd || 0).toFixed(2)} · ${money.today?.payments_count || 0} payments`;
-      $("moneyWeek").textContent = `$${Number(money.week?.gross_usd || 0).toFixed(2)} · ${money.week?.payments_count || 0} payments`;
-      $("moneyMonth").textContent = `$${Number(money.month?.gross_usd || 0).toFixed(2)} · ${money.month?.payments_count || 0} payments`;
+      $("dueNow").textContent = status.due_now_count ?? 0;
+      $("queueSub").textContent = `${status.due_now_count ?? 0} due now`;
+      $("queueFoot").textContent = `${status.in_sequence_count ?? 0} in sequence`;
+
+      $("windowValue").textContent = session.label;
+      $("windowSub").textContent = `${fmtShort(session.win.start)}–${fmtShort(session.win.end)} · ${session.win.tz}`;
+      $("windowFoot").textContent = `cap ${status.daily_send_cap ?? 0} · ${session.reason}`;
 
       $("replyToEmail").textContent = status.reply_to_email || "--";
-      $("replyMailbox").textContent = status.reply_mailbox_address || "--";
       $("outboundProvider").textContent = status.provider || "--";
-      $("senderSummary").textContent = Object.entries(status.sender_counts_today || {}).map(([k,v]) => `${k}:${v}`).join(" · ") || "none yet";
+      $("mailboxes").textContent = status.smtp_mailboxes_configured ?? 0;
+      $("perMailboxCap").textContent = status.per_mailbox_daily_cap ?? 0;
+      $("moneyWeek").textContent = `${fmtMoney(money.week?.gross_usd || 0)} · ${money.week?.payments_count || 0} payments`;
+      $("moneyMonth").textContent = `${fmtMoney(money.month?.gross_usd || 0)} · ${money.month?.payments_count || 0} payments`;
 
       renderSenderBars(status.sender_counts_today || {});
       renderActivityList("recentSentList", status.recent_sent || []);
       renderActivityList("recentReplyList", status.recent_replies || [], {incoming:true});
-      pushHistory(status, money);
-      drawChart();
 
-      $("statusLine").innerHTML = `<span class="good">Last update ${fmtTime(new Date())}</span><br>Cold outreach only sends inside the real session window. Outside that window, the cron may wake up but it should send 0. Current state: ${session.reason}.`;
+      $("statusLine").innerHTML = `<span class="good">Replies → Money → Sends → Queue → Window.</span> If replies and money stay at 0 after enough sends, change targeting or the first email.`;
     }
 
     async function fetchAll(){
@@ -562,9 +439,7 @@
           fetch(STATUS_URL, {cache:"no-store"}),
           fetch(MONEY_URL, {cache:"no-store"})
         ]);
-        if(!statusRes.ok || !moneyRes.ok){
-          throw new Error(`status ${statusRes.status} / money ${moneyRes.status}`);
-        }
+        if(!statusRes.ok || !moneyRes.ok) throw new Error(`status ${statusRes.status} / money ${moneyRes.status}`);
         const status = await statusRes.json();
         const money = await moneyRes.json();
         render(status, money);
@@ -585,45 +460,26 @@
       const m = lastPayload.money;
       const text = [
         `AO LIVE`,
-        `sent_today=${s.sent_today}`,
         `replies_today=${s.replies_today}`,
+        `money_today=${m.today?.gross_usd || 0}`,
+        `payments_today=${m.today?.payments_count || 0}`,
+        `sent_today=${s.sent_today}`,
         `due_now_count=${s.due_now_count}`,
         `in_sequence_count=${s.in_sequence_count}`,
         `daily_send_cap=${s.daily_send_cap}`,
+        `send_window_is_open=${s.send_window_is_open}`,
         `sender_counts_today=${JSON.stringify(s.sender_counts_today || {})}`,
         `reply_to_email=${s.reply_to_email || ''}`,
         `reply_mailbox_address=${s.reply_mailbox_address || ''}`,
         `recent_sent=${JSON.stringify((s.recent_sent || []).slice(0,3))}`,
-        `recent_replies=${JSON.stringify((s.recent_replies || []).slice(0,3))}`,
-        `money_today=${m.today?.gross_usd || 0}`,
-        `money_week=${m.week?.gross_usd || 0}`,
-        `money_month=${m.month?.gross_usd || 0}`
-      ].join("\\n");
+        `recent_replies=${JSON.stringify((s.recent_replies || []).slice(0,3))}`
+      ].join("\n");
       await navigator.clipboard.writeText(text);
       $("statusLine").innerHTML = `<span class="good">Status copied.</span>`;
     });
 
-    document.querySelectorAll(".tab").forEach(btn => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
-        btn.classList.add("active");
-        metric = btn.dataset.metric;
-        drawChart();
-      });
-    });
-
     fetchAll();
     setInterval(fetchAll, 5000);
-    setInterval(() => {
-      if(lastPayload){
-        const session = sessionState(lastPayload.status);
-        $("nextSend").textContent = fmtTime(session.nextTick);
-        $("nextSendSide").textContent = fmtTime(session.nextTick);
-        $("nextOps").textContent = `ops ${fmtTime(nextBoundary(15))}`;
-        $("marketOpen").textContent = fmtTimeShort(session.nextOpen);
-        $("marketClose").textContent = fmtTimeShort(session.nextClose);
-      }
-    }, 1000);
   </script>
 </body>
 </html>
