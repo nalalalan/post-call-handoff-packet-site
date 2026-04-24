@@ -1,4 +1,5 @@
 window.AO_CONFIG = {
+  SITE_BASE_URL: "https://relay.aolabs.io",
   API_BASE: "https://alan-operator-backend-production.up.railway.app",
   PACKET_CHECKOUT_URL: "https://buy.stripe.com/bJeaEZb4mf6de64dSi2Nq02",
   PACKET_5_PACK_URL: "https://buy.stripe.com/28EaEZgoGf6d7HG9C22Nq03",
