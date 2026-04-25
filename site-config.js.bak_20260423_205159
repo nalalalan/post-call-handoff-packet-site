@@ -1,9 +1,0 @@
-window.AO_CONFIG = {
-  API_BASE: "https://alan-operator-backend-production.up.railway.app",
-  PACKET_CHECKOUT_URL: "https://buy.stripe.com/bJeaEZb4mf6de64dSi2Nq02",
-  PACKET_5_PACK_URL: "https://buy.stripe.com/28EaEZgoGf6d7HG9C22Nq03",
-  WEEKLY_SPRINT_URL: "https://buy.stripe.com/8x200l0pIcY54vu8xY2Nq05",
-  MONTHLY_AUTOPILOT_URL: "https://buy.stripe.com/aFaeVf0pI3nv6DC15w2Nq06",
-  SAMPLE_PDF_URL: "sample.pdf",
-  CLIENT_GATE_PAGE: "client-intake.html"
-};
