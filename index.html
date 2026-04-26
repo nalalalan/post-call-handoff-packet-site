@@ -153,7 +153,7 @@
             <div class="pill" id="lastUpdatedPill">Last update --:--:--</div>
           </div>
         </div>
-        <div class="statusline" id="statusLine">Bootingâ€¦</div>
+        <div class="statusline" id="statusLine">BootingÃ¢â‚¬Â¦</div>
       </div>
       <div class="hero-right">
         <div class="hero-mini">
@@ -189,8 +189,8 @@
       <div class="card accent-blue">
         <div class="label">2. Money</div>
         <div class="value" id="moneyToday">$0.00</div>
-        <div class="sub" id="moneySub">today Â· 0 payments</div>
-        <div class="foot" id="moneyFoot">week $0.00 Â· month $0.00</div>
+        <div class="sub" id="moneySub">today Ã‚Â· 0 payments</div>
+        <div class="foot" id="moneyFoot">week $0.00 Ã‚Â· month $0.00</div>
       </div>
       <div class="card accent-green">
         <div class="label">3. Sends</div>
@@ -334,7 +334,7 @@
         if(!short) return `${email}:${count}`;
         const local = String(email).split("@")[0] || email;
         return `${local} ${count}`;
-      }).join(" Â· ");
+      }).join(" Ã‚Â· ");
     }
 
     function escapeHtml(value){
@@ -376,7 +376,7 @@
           <div class="activity-item">
             <div class="activity-top"><span>${escapeHtml(when)}</span><span>${escapeHtml(subject)}</span></div>
             <div class="activity-title">${escapeHtml(company)}</div>
-            <div class="activity-sub">${escapeHtml(address)}${secondary ? ` Â· ${escapeHtml(secondary)}` : ""}</div>
+            <div class="activity-sub">${escapeHtml(address)}${secondary ? ` Ã‚Â· ${escapeHtml(secondary)}` : ""}</div>
             <div class="activity-preview">${escapeHtml(preview)}</div>
           </div>
         `;
@@ -410,7 +410,7 @@
       const paymentsToday = Number(money.today?.payments_count || 0);
 
       $("liveState").textContent = "live";
-      $("marketPill").textContent = `${session.label} Â· ${session.reason}`;
+      $("marketPill").textContent = `${session.label} Ã‚Â· ${session.reason}`;
       $("lastUpdatedPill").textContent = `Last update ${fmtTime(new Date())}`;
       $("heroValue").textContent = fmtMoney(money.today?.gross_usd || 0);
       $("replyMailbox").textContent = status.reply_mailbox_address || "--";
@@ -419,15 +419,15 @@
       $("moneyTodayMini").textContent = fmtMoney(money.today?.gross_usd || 0);
       $("moneyTodayMiniSub").textContent = `${paymentsToday} payment${paymentsToday === 1 ? '' : 's'}`;
       $("nextTick").textContent = fmtShort(session.nextTick);
-      $("nextTickSub").textContent = session.label === "OPEN" ? `next send tick Â· ${session.win.tz}` : `next open ${fmtShort(session.nextOpen)} Â· ${session.win.tz}`;
+      $("nextTickSub").textContent = session.label === "OPEN" ? `next send tick Ã‚Â· ${session.win.tz}` : `next open ${fmtShort(session.nextOpen)} Ã‚Â· ${session.win.tz}`;
 
       $("repliesToday").textContent = status.replies_today ?? 0;
       $("repliesSub").textContent = `${status.replies_today ?? 0} today`;
       $("repliesFoot").textContent = (status.replies_today ?? 0) > 0 ? "real signal present" : "watch this first";
 
       $("moneyToday").textContent = fmtMoney(money.today?.gross_usd || 0);
-      $("moneySub").textContent = `today Â· ${paymentsToday} payment${paymentsToday === 1 ? '' : 's'}`;
-      $("moneyFoot").textContent = `week ${fmtMoney(money.week?.gross_usd || 0)} Â· month ${fmtMoney(money.month?.gross_usd || 0)}`;
+      $("moneySub").textContent = `today Ã‚Â· ${paymentsToday} payment${paymentsToday === 1 ? '' : 's'}`;
+      $("moneyFoot").textContent = `week ${fmtMoney(money.week?.gross_usd || 0)} Ã‚Â· month ${fmtMoney(money.month?.gross_usd || 0)}`;
 
       $("sentToday").textContent = status.sent_today ?? 0;
       $("sentSub").textContent = `${status.sent_today ?? 0} / ${status.daily_send_cap ?? 0} cap`;
@@ -438,21 +438,21 @@
       $("queueFoot").textContent = `${status.in_sequence_count ?? 0} in sequence`;
 
       $("windowValue").textContent = session.label;
-      $("windowSub").textContent = `${fmtShort(session.win.start)}â€“${fmtShort(session.win.end)} Â· ${session.win.tz}`;
-      $("windowFoot").textContent = `cap ${status.daily_send_cap ?? 0} Â· ${session.reason}`;
+      $("windowSub").textContent = `${fmtShort(session.win.start)}Ã¢â‚¬â€œ${fmtShort(session.win.end)} Ã‚Â· ${session.win.tz}`;
+      $("windowFoot").textContent = `cap ${status.daily_send_cap ?? 0} Ã‚Â· ${session.reason}`;
 
       $("replyToEmail").textContent = status.reply_to_email || "--";
       $("outboundProvider").textContent = status.provider || "--";
       $("mailboxes").textContent = status.smtp_mailboxes_configured ?? 0;
       $("perMailboxCap").textContent = status.per_mailbox_daily_cap ?? 0;
-      $("moneyWeek").textContent = `${fmtMoney(money.week?.gross_usd || 0)} Â· ${money.week?.payments_count || 0} payments`;
-      $("moneyMonth").textContent = `${fmtMoney(money.month?.gross_usd || 0)} Â· ${money.month?.payments_count || 0} payments`;
+      $("moneyWeek").textContent = `${fmtMoney(money.week?.gross_usd || 0)} Ã‚Â· ${money.week?.payments_count || 0} payments`;
+      $("moneyMonth").textContent = `${fmtMoney(money.month?.gross_usd || 0)} Ã‚Â· ${money.month?.payments_count || 0} payments`;
 
       renderSenderBars(status.sender_counts_today || {});
       renderActivityList("recentSentList", status.recent_sent || []);
       renderActivityList("recentReplyList", status.recent_replies || [], {incoming:true});
 
-      $("statusLine").innerHTML = `<span class="good">Replies â†’ Money â†’ Sends â†’ Queue â†’ Window.</span> If replies and money stay at 0 after enough sends, change targeting or the first email.`;
+      $("statusLine").innerHTML = `<span class="good">Replies Ã¢â€ â€™ Money Ã¢â€ â€™ Sends Ã¢â€ â€™ Queue Ã¢â€ â€™ Window.</span> If replies and money stay at 0 after enough sends, change targeting or the first email.`;
     }
 
     async function fetchAll(){
