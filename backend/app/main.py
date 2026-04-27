@@ -29,7 +29,12 @@ from app.models.production_wiring import (  # noqa: F401
 from app.api.routes.autonomous_ops import router as autonomous_ops_router
 from app.api.routes.custom_outreach import router as custom_outreach_router
 from app.api.routes.relay_intent import router as relay_intent_router
-from app.services.relay_recovery_patch import apply_relay_recovery_patch, router as relay_recovery_router
+from app.services.relay_recovery_patch import (
+    apply_relay_recovery_patch,
+    router as relay_recovery_router,
+    start_relay_money_loop,
+    stop_relay_money_loop,
+)
 
 
 apply_relay_recovery_patch()
@@ -58,11 +63,14 @@ def _cors_origins() -> list[str]:
     return merged
 
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    yield
+    start_relay_money_loop()
+    try:
+        yield
+    finally:
+        await stop_relay_money_loop()
 
 
 app = FastAPI(title="ao-relay-backend", lifespan=lifespan)
@@ -88,8 +96,6 @@ app.include_router(relay_recovery_router, prefix="/acquisition-supervisor", tags
 app.include_router(autonomous_ops_router, prefix="/ops", tags=["ops"])
 app.include_router(custom_outreach_router, prefix="/custom-outreach", tags=["custom-outreach"])
 app.include_router(relay_intent_router, prefix="/api/relay", tags=["relay-intent"])
-
-
 
 
 @app.get("/")
