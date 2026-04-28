@@ -243,6 +243,8 @@
           <div class="mini-row"><div class="left">Provider</div><div id="outboundProvider">--</div></div>
           <div class="mini-row"><div class="left">Configured mailboxes</div><div id="mailboxes">0</div></div>
           <div class="mini-row"><div class="left">Per-mailbox cap</div><div id="perMailboxCap">0</div></div>
+          <div class="mini-row"><div class="left">Direct inboxes</div><div id="directInboxes">0</div></div>
+          <div class="mini-row"><div class="left">Generic inboxes</div><div id="genericInboxes">0</div></div>
           <div class="mini-row"><div class="left">Week money</div><div id="moneyWeek">$0.00</div></div>
           <div class="mini-row"><div class="left">Month money</div><div id="moneyMonth">$0.00</div></div>
           <div class="bars" id="senderBars"></div>
@@ -445,6 +447,8 @@
       $("outboundProvider").textContent = status.provider || "--";
       $("mailboxes").textContent = status.smtp_mailboxes_configured ?? 0;
       $("perMailboxCap").textContent = status.per_mailbox_daily_cap ?? 0;
+      $("directInboxes").textContent = status.direct_inbox_count ?? 0;
+      $("genericInboxes").textContent = status.generic_inbox_count ?? 0;
       $("moneyWeek").textContent = `${fmtMoney(money.week?.gross_usd || 0)} · ${money.week?.payments_count || 0} payments`;
       $("moneyMonth").textContent = `${fmtMoney(money.month?.gross_usd || 0)} · ${money.month?.payments_count || 0} payments`;
 
@@ -452,7 +456,10 @@
       renderActivityList("recentSentList", status.recent_sent || []);
       renderActivityList("recentReplyList", status.recent_replies || [], {incoming:true});
 
-      $("statusLine").innerHTML = `<span class="good">Replies → Money → Sends → Queue → Window.</span> If replies and money stay at 0 after enough sends, change targeting or the first email.`;
+      const direct = Number(status.direct_inbox_count || 0);
+      const generic = Number(status.generic_inbox_count || 0);
+      const inboxWarning = generic > direct ? " Generic inboxes dominate; fix lead source before scaling." : " Direct inbox mix is usable.";
+      $("statusLine").innerHTML = `<span class="good">Replies → Money → Direct inboxes → Sends.</span>${inboxWarning}`;
     }
 
     async function fetchAll(){
@@ -488,6 +495,8 @@
         `sent_today=${s.sent_today}`,
         `due_now_count=${s.due_now_count}`,
         `in_sequence_count=${s.in_sequence_count}`,
+        `direct_inbox_count=${s.direct_inbox_count || 0}`,
+        `generic_inbox_count=${s.generic_inbox_count || 0}`,
         `daily_send_cap=${s.daily_send_cap}`,
         `send_window_is_open=${s.send_window_is_open}`,
         `sender_counts_today=${JSON.stringify(s.sender_counts_today || {})}`,

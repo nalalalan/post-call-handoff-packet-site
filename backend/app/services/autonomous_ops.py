@@ -16,11 +16,21 @@ from app.core.config import settings
 from app.db.base import SessionLocal
 from app.integrations.resend_client import ResendClient
 from app.models.acquisition_supervisor import AcquisitionEvent, AcquisitionProspect
-from app.services.acquisition_supervisor import acquisition_digest, enrich_unsent_prospects, import_from_apollo_search
+from app.services.acquisition_supervisor import (
+    acquisition_digest,
+    enrich_unsent_prospects,
+    import_from_apollo_people_search,
+    import_from_apollo_search,
+)
 from app.services.custom_outreach import outreach_status, run_custom_outreach_cycle
 from app.services.post_purchase_autopilot import (
     run_paid_intake_reminder_sweep,
     run_post_delivery_upsell_sweep,
+)
+from app.services.relay_performance import (
+    active_relay_query_hint,
+    maybe_run_weekly_performance_review,
+    relay_performance_status,
 )
 
 
@@ -54,6 +64,13 @@ def _queries() -> list[str]:
 
 def choose_query(now: datetime | None = None) -> str:
     now = now or datetime.utcnow()
+    try:
+        query_hint = active_relay_query_hint(now)
+        if query_hint:
+            return query_hint
+    except Exception:
+        pass
+
     queries = _queries()
     idx = (now.timetuple().tm_yday + now.hour) % len(queries)
     return queries[idx]
@@ -271,7 +288,10 @@ async def run_autonomous_cycle(
     errors: list[str] = []
 
     try:
-        search_result = await import_from_apollo_search({"q_keywords": query})
+        if settings.apollo_api_key and os.getenv("ACQ_OPS_SOURCE", "apollo_people").strip() == "apollo_people":
+            search_result = await import_from_apollo_people_search({"q_keywords": query})
+        else:
+            search_result = await import_from_apollo_search({"q_keywords": query})
     except Exception as exc:
         search_result = {"status": "error", "searched": 0, "upserted": 0, "error": str(exc)}
         errors.append(f"search_error: {exc}")
@@ -306,6 +326,12 @@ async def run_autonomous_cycle(
 
     outreach_digest = outreach_status()
 
+    try:
+        performance_review = maybe_run_weekly_performance_review()
+    except Exception as exc:
+        performance_review = {"status": "error", "summary": str(exc)}
+        errors.append(f"performance_review_error: {exc}")
+
     current_state = {
         "query": query,
         "search_result": search_result,
@@ -314,6 +340,7 @@ async def run_autonomous_cycle(
         "reminders_result": reminders_result,
         "upsell_result": upsell_result,
         "outreach_digest": outreach_digest,
+        "performance_review": performance_review,
         "errors": errors,
         "started_at": started_at,
         "finished_at": datetime.utcnow().isoformat(),
@@ -343,6 +370,7 @@ async def run_autonomous_cycle(
         "reminders_result": reminders_result,
         "upsell_result": upsell_result,
         "outreach_digest": outreach_digest,
+        "performance_review": performance_review,
         "alerts_sent": alerts_sent,
         "errors": errors,
         "started_at": started_at,
@@ -357,6 +385,7 @@ def ops_status() -> dict[str, Any]:
     return {
         "latest_cycle": latest,
         "outreach_digest": outreach_status(),
+        "relay_performance": relay_performance_status(),
         "query_rotation": _queries(),
     }
 

@@ -9,6 +9,7 @@ from app.services.acquisition_supervisor import (
     handle_intake_webhook,
     handle_smartlead_reply_webhook,
     handle_stripe_purchase_webhook,
+    import_from_apollo_people_search,
     import_from_apollo_search,
     tick_supervisor,
 )
@@ -24,6 +25,12 @@ async def supervisor_digest() -> dict:
 @router.post("/apollo-search")
 def apollo_search(body: dict, background_tasks: BackgroundTasks) -> dict:
     background_tasks.add_task(run_apollo_search, body)
+    return {"status": "accepted"}
+
+
+@router.post("/apollo-people-search")
+def apollo_people_search(body: dict, background_tasks: BackgroundTasks) -> dict:
+    background_tasks.add_task(run_apollo_people_search, body)
     return {"status": "accepted"}
 
 
@@ -56,6 +63,13 @@ def run_apollo_search(body: dict) -> None:
         asyncio.run(import_from_apollo_search(body))
     except Exception as e:
         print("apollo_search error:", e)
+
+
+def run_apollo_people_search(body: dict) -> None:
+    try:
+        asyncio.run(import_from_apollo_people_search(body))
+    except Exception as e:
+        print("apollo_people_search error:", e)
 
 
 def run_tick(body: dict) -> None:

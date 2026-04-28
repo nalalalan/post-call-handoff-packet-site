@@ -1,0 +1,604 @@
+from __future__ import annotations
+
+import json
+import os
+import re
+from datetime import datetime, timedelta
+from typing import Any
+
+import httpx
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.db.base import SessionLocal
+from app.models.acquisition_supervisor import AcquisitionEvent, AcquisitionProspect
+
+
+PERFORMANCE_REVIEW_EVENT = "relay_performance_weekly_review"
+EXPERIMENT_PLAN_EVENT = "relay_experiment_plan"
+RESEARCH_INPUT_EVENT = "relay_optimizer_research_input"
+
+DEFAULT_EXPERIMENT_VARIANT = "control_sample_ask"
+CURRENT_VERSION = "relay_optimizer_v1"
+
+GENERIC_INBOX_LOCAL_PARTS = {
+    "admin",
+    "contact",
+    "hello",
+    "hi",
+    "info",
+    "inquiries",
+    "mail",
+    "marketing",
+    "office",
+    "sales",
+    "support",
+    "team",
+}
+
+EXPERIMENTS: dict[str, dict[str, Any]] = {
+    "control_sample_ask": {
+        "label": "Control: sample ask",
+        "hypothesis": "Plain after-call cleanup language is enough if the lead is a real fit.",
+        "query_rotation": [
+            "paid media agency founder",
+            "google ads agency owner",
+            "performance marketing agency founder",
+        ],
+        "change": "Keep the current direct sample ask.",
+    },
+    "sample_first_plain": {
+        "label": "Sample first",
+        "hypothesis": "Leading with the sample makes the offer concrete before asking for interest.",
+        "query_rotation": [
+            "b2b paid media agency founder",
+            "google ads agency managing partner",
+            "meta ads agency owner",
+        ],
+        "change": "Put the sample earlier and keep the ask low-friction.",
+    },
+    "pain_owner_direct": {
+        "label": "Owner of cleanup pain",
+        "hypothesis": "Asking who owns after-call cleanup will expose whether the pain exists.",
+        "query_rotation": [
+            "agency owner client follow up",
+            "paid media agency operations director",
+            "founder led marketing agency",
+        ],
+        "change": "Make the first email about ownership of the after-call cleanup job.",
+    },
+    "paid_test_explicit": {
+        "label": "Explicit paid test",
+        "hypothesis": "Being clear about the $40 test filters for buyers and reduces vague curiosity.",
+        "query_rotation": [
+            "growth marketing agency founder",
+            "ppc agency owner",
+            "b2b lead generation agency owner",
+        ],
+        "change": "Mention the $40 test earlier after enough reply signal exists.",
+    },
+}
+
+DEFAULT_RESEARCH_SOURCES = [
+    "https://support.google.com/a/answer/14229414",
+    "https://support.google.com/mail/answer/81126",
+    "https://senders.yahooinc.com/best-practices/",
+    "https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business",
+]
+
+
+def _session() -> Session:
+    return SessionLocal()
+
+
+def _now() -> datetime:
+    return datetime.utcnow()
+
+
+def _week_start(value: datetime | None = None) -> datetime:
+    value = value or _now()
+    start = value - timedelta(days=value.weekday())
+    return start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _safe_json(raw: str | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def _event_payload(row: AcquisitionEvent | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    payload = _safe_json(row.payload_json)
+    if payload:
+        payload.setdefault("logged_at", row.created_at.isoformat() if row.created_at else "")
+        payload.setdefault("event_id", row.id)
+    return payload or None
+
+
+def _latest_event(session: Session, event_type: str) -> AcquisitionEvent | None:
+    return session.execute(
+        select(AcquisitionEvent)
+        .where(AcquisitionEvent.event_type == event_type)
+        .order_by(AcquisitionEvent.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def _event_count(
+    session: Session,
+    event_type: str,
+    *,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    like: bool = False,
+) -> int:
+    stmt = select(func.count(AcquisitionEvent.id))
+    if like:
+        stmt = stmt.where(AcquisitionEvent.event_type.like(event_type))
+    else:
+        stmt = stmt.where(AcquisitionEvent.event_type == event_type)
+    if start is not None:
+        stmt = stmt.where(AcquisitionEvent.created_at >= start)
+    if end is not None:
+        stmt = stmt.where(AcquisitionEvent.created_at < end)
+    return int(session.execute(stmt).scalar() or 0)
+
+
+def _stripe_metrics(session: Session, *, start: datetime, end: datetime) -> dict[str, Any]:
+    events = session.execute(
+        select(AcquisitionEvent)
+        .where(AcquisitionEvent.event_type == "stripe_paid")
+        .where(AcquisitionEvent.created_at >= start)
+        .where(AcquisitionEvent.created_at < end)
+        .order_by(AcquisitionEvent.created_at.desc())
+    ).scalars().all()
+
+    gross_cents = 0
+    payments = 0
+    for event in events:
+        payload = _safe_json(event.payload_json)
+        email = str(
+            payload.get("customer_details", {}).get("email")
+            or payload.get("customer_email")
+            or payload.get("email")
+            or ""
+        ).strip().lower()
+        if email == "pham.alann@gmail.com":
+            continue
+        gross_cents += int(payload.get("amount_total") or 0)
+        payments += 1
+
+    return {
+        "payments": payments,
+        "gross_usd": round(gross_cents / 100.0, 2),
+        "gross_cents": gross_cents,
+    }
+
+
+def _is_generic_inbox(email_address: str) -> bool:
+    local = (email_address or "").split("@", 1)[0].strip().lower()
+    if not local:
+        return True
+    local_base = local.replace(".", "").replace("-", "").replace("_", "")
+    if local in GENERIC_INBOX_LOCAL_PARTS or local_base in GENERIC_INBOX_LOCAL_PARTS:
+        return True
+    return local.startswith(("info", "hello", "contact", "admin", "support", "sales"))
+
+
+def _prospect_health(session: Session) -> dict[str, Any]:
+    active_statuses = ["scored", "queued_to_sender", "sent_custom", "sent_to_smartlead"]
+    prospects = session.execute(
+        select(AcquisitionProspect)
+        .where(AcquisitionProspect.contact_email != "")
+        .where(AcquisitionProspect.status.in_(active_statuses))
+    ).scalars().all()
+
+    direct = 0
+    generic = 0
+    fit_scores: list[int] = []
+    statuses: dict[str, int] = {}
+    for prospect in prospects:
+        if _is_generic_inbox(prospect.contact_email):
+            generic += 1
+        else:
+            direct += 1
+        fit_scores.append(int(prospect.fit_score or 0))
+        statuses[prospect.status] = statuses.get(prospect.status, 0) + 1
+
+    return {
+        "active_prospects": len(prospects),
+        "direct_inbox_count": direct,
+        "generic_inbox_count": generic,
+        "avg_fit_score": round(sum(fit_scores) / len(fit_scores), 1) if fit_scores else 0,
+        "status_counts": statuses,
+    }
+
+
+def _metrics_for_window(session: Session, *, start: datetime, end: datetime) -> dict[str, Any]:
+    sends = _event_count(session, "custom_outreach_sent_step_%", start=start, end=end, like=True)
+    replies = (
+        _event_count(session, "custom_outreach_reply_seen", start=start, end=end)
+        + _event_count(session, "smartlead_reply", start=start, end=end)
+    )
+    failures = _event_count(session, "custom_outreach_send_failed", start=start, end=end)
+    auto_replies = _event_count(session, "custom_outreach_auto_reply_sent", start=start, end=end)
+    stripe = _stripe_metrics(session, start=start, end=end)
+
+    return {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "sends": sends,
+        "replies": replies,
+        "reply_rate": round(replies / sends, 4) if sends else 0,
+        "send_failures": failures,
+        "auto_replies": auto_replies,
+        "payments": stripe["payments"],
+        "gross_usd": stripe["gross_usd"],
+    }
+
+
+def _research_urls() -> list[str]:
+    raw = os.getenv("RELAY_OPTIMIZER_RESEARCH_URLS", "").strip()
+    urls = [item.strip() for item in raw.split("|") if item.strip()] if raw else []
+    merged: list[str] = []
+    for url in urls + DEFAULT_RESEARCH_SOURCES:
+        if url and url not in merged:
+            merged.append(url)
+    return merged[:8]
+
+
+def _html_title(text: str) -> str:
+    match = re.search(r"<title[^>]*>(.*?)</title>", text, flags=re.I | re.S)
+    if not match:
+        return ""
+    title = re.sub(r"\s+", " ", match.group(1)).strip()
+    return re.sub(r"<[^>]+>", "", title)[:180]
+
+
+def fetch_online_research_inputs() -> list[dict[str, Any]]:
+    inputs: list[dict[str, Any]] = []
+    headers = {"User-Agent": "relay-optimizer/1.0"}
+    for url in _research_urls():
+        item: dict[str, Any] = {
+            "url": url,
+            "fetched_at": _now().isoformat(),
+        }
+        try:
+            response = httpx.get(url, headers=headers, follow_redirects=True, timeout=6.0)
+            item["status_code"] = response.status_code
+            item["title"] = _html_title(response.text)
+            item["ok"] = 200 <= response.status_code < 400
+        except Exception as exc:
+            item["ok"] = False
+            item["error"] = f"{type(exc).__name__}: {exc}"
+        inputs.append(item)
+    return inputs
+
+
+def _knowledge_takeaways() -> list[dict[str, str]]:
+    return [
+        {
+            "source": "Google sender guidelines",
+            "takeaway": "Keep spam complaints very low, authenticate mail, and prefer easy unsubscribe for promotional mail.",
+        },
+        {
+            "source": "Yahoo Sender Hub",
+            "takeaway": "Relevant mail, low complaint rate, SPF/DKIM/DMARC, and easy opt-out protect deliverability.",
+        },
+        {
+            "source": "FTC CAN-SPAM guide",
+            "takeaway": "Headers and subject lines must be honest; commercial mail needs a clear opt-out path.",
+        },
+        {
+            "source": "Relay internal data",
+            "takeaway": "Change one thing per week so replies and payments can be attributed to a specific test.",
+        },
+    ]
+
+
+def _latest_plan_payload(session: Session) -> dict[str, Any] | None:
+    return _event_payload(_latest_event(session, EXPERIMENT_PLAN_EVENT))
+
+
+def _current_week_plan_payload(session: Session, week_start: datetime | None = None) -> dict[str, Any] | None:
+    week_start = week_start or _week_start()
+    rows = session.execute(
+        select(AcquisitionEvent)
+        .where(AcquisitionEvent.event_type == EXPERIMENT_PLAN_EVENT)
+        .order_by(AcquisitionEvent.created_at.desc())
+        .limit(12)
+    ).scalars().all()
+    week_key = week_start.date().isoformat()
+    for row in rows:
+        payload = _event_payload(row)
+        if payload and payload.get("week_start_date") == week_key:
+            return payload
+    return None
+
+
+def _variant_sequence() -> list[str]:
+    raw = os.getenv("RELAY_EXPERIMENT_SEQUENCE", "").strip()
+    variants = [item.strip() for item in raw.split("|") if item.strip()] if raw else []
+    valid = [item for item in variants if item in EXPERIMENTS]
+    return valid or list(EXPERIMENTS.keys())
+
+
+def _choose_variant(
+    *,
+    current_week: dict[str, Any],
+    prior_week: dict[str, Any],
+    latest_plan: dict[str, Any] | None,
+) -> tuple[str, list[str]]:
+    min_sample = int(os.getenv("RELAY_EXPERIMENT_MIN_SAMPLE", "20"))
+    evidence = prior_week if int(prior_week.get("sends", 0)) >= min_sample else current_week
+    evidence_name = "prior week" if evidence is prior_week else "current week"
+    sends = int(evidence.get("sends", 0))
+    replies = int(evidence.get("replies", 0))
+    payments = int(evidence.get("payments", 0))
+    failures = int(evidence.get("send_failures", 0))
+    sequence = _variant_sequence()
+    previous_variant = str((latest_plan or {}).get("experiment_variant") or DEFAULT_EXPERIMENT_VARIANT)
+    reasons: list[str] = []
+
+    if failures > 0 and failures >= sends:
+        reasons.append("Send failures dominated the last window; keep copy stable and fix infrastructure first.")
+        return previous_variant if previous_variant in EXPERIMENTS else DEFAULT_EXPERIMENT_VARIANT, reasons
+
+    if sends < min_sample:
+        reasons.append("Sample is still small; avoid random thrashing until at least 20 sends land.")
+        return previous_variant if previous_variant in EXPERIMENTS else DEFAULT_EXPERIMENT_VARIANT, reasons
+
+    if payments > 0:
+        reasons.append(f"Payment signal exists in the {evidence_name}; keep the current lane and collect more evidence.")
+        return previous_variant if previous_variant in EXPERIMENTS else DEFAULT_EXPERIMENT_VARIANT, reasons
+
+    if replies > 0:
+        reasons.append(f"Reply signal exists in the {evidence_name} without payments; make the paid test clearer.")
+        return "paid_test_explicit", reasons
+
+    reasons.append(f"No reply signal after a measurable {evidence_name} send window; rotate one controlled copy/targeting variable.")
+    if previous_variant not in sequence:
+        return sequence[0], reasons
+    return sequence[(sequence.index(previous_variant) + 1) % len(sequence)], reasons
+
+
+def _daily_cap_recommendation(metrics: dict[str, Any]) -> int:
+    sends = int(metrics.get("sends", 0))
+    replies = int(metrics.get("replies", 0))
+    failures = int(metrics.get("send_failures", 0))
+    current_cap = int(os.getenv("BUYER_ACQ_DAILY_SEND_CAP", os.getenv("ACQ_DAILY_SEND_CAP", "20")) or "20")
+    if failures > 0:
+        return min(current_cap, 10)
+    if sends >= 30 and replies == 0:
+        return min(current_cap, 10)
+    if replies > 0:
+        return min(max(current_cap, 10), 20)
+    return min(current_cap, 10)
+
+
+def _plan_payload(
+    *,
+    week_start: datetime,
+    variant: str,
+    current_week: dict[str, Any],
+    prior_week: dict[str, Any],
+    latest_plan: dict[str, Any] | None,
+    research_inputs: list[dict[str, Any]],
+    reasons: list[str],
+) -> dict[str, Any]:
+    experiment = EXPERIMENTS.get(variant, EXPERIMENTS[DEFAULT_EXPERIMENT_VARIANT])
+    evidence_for_cap = prior_week if int(prior_week.get("sends", 0)) else current_week
+    return {
+        "version": CURRENT_VERSION,
+        "week_start": week_start.isoformat(),
+        "week_start_date": week_start.date().isoformat(),
+        "experiment_variant": variant,
+        "experiment_label": experiment["label"],
+        "hypothesis": experiment["hypothesis"],
+        "change": experiment["change"],
+        "query_rotation": experiment["query_rotation"],
+        "daily_cap_recommendation": _daily_cap_recommendation(evidence_for_cap),
+        "decision_reasons": reasons,
+        "current_week_metrics": current_week,
+        "prior_week_metrics": prior_week,
+        "previous_experiment_variant": (latest_plan or {}).get("experiment_variant"),
+        "knowledge_takeaways": _knowledge_takeaways(),
+        "online_research_inputs": research_inputs,
+        "guardrails": [
+            "One major change per week.",
+            "Do not increase volume when reply signal is zero.",
+            "Prefer direct business contacts over generic inboxes.",
+            "Keep subjects honest and keep opt-out handling obvious.",
+        ],
+        "created_at": _now().isoformat(),
+    }
+
+
+def run_weekly_performance_review(*, force: bool = False, fetch_research: bool = True) -> dict[str, Any]:
+    now = _now()
+    week_start = _week_start(now)
+    current_start = week_start
+    current_end = now
+    prior_start = week_start - timedelta(days=7)
+    prior_end = week_start
+
+    with _session() as session:
+        existing = _current_week_plan_payload(session, week_start)
+        if existing and not force:
+            return {
+                "status": "ok",
+                "summary": "weekly plan already exists",
+                "plan": existing,
+                "created": False,
+            }
+
+        current_week = _metrics_for_window(session, start=current_start, end=current_end)
+        prior_week = _metrics_for_window(session, start=prior_start, end=prior_end)
+        current_week["prospect_health"] = _prospect_health(session)
+        latest_plan = _latest_plan_payload(session)
+
+    research_inputs = fetch_online_research_inputs() if fetch_research else []
+    variant, reasons = _choose_variant(
+        current_week=current_week,
+        prior_week=prior_week,
+        latest_plan=latest_plan,
+    )
+    plan = _plan_payload(
+        week_start=week_start,
+        variant=variant,
+        current_week=current_week,
+        prior_week=prior_week,
+        latest_plan=latest_plan,
+        research_inputs=research_inputs,
+        reasons=reasons,
+    )
+
+    with _session() as session:
+        session.add(
+            AcquisitionEvent(
+                event_type=EXPERIMENT_PLAN_EVENT,
+                prospect_external_id="relay-performance",
+                summary=f"{plan['week_start_date']} {variant}: {plan['experiment_label']}",
+                payload_json=json.dumps(plan, ensure_ascii=False),
+            )
+        )
+        session.add(
+            AcquisitionEvent(
+                event_type=PERFORMANCE_REVIEW_EVENT,
+                prospect_external_id="relay-performance",
+                summary=(
+                    f"weekly review sends={prior_week['sends']} "
+                    f"replies={prior_week['replies']} gross=${prior_week['gross_usd']}"
+                ),
+                payload_json=json.dumps(
+                    {
+                        "version": CURRENT_VERSION,
+                        "week_start": week_start.isoformat(),
+                        "current_week_metrics": current_week,
+                        "prior_week_metrics": prior_week,
+                        "selected_plan": plan,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+        )
+        if research_inputs:
+            session.add(
+                AcquisitionEvent(
+                    event_type=RESEARCH_INPUT_EVENT,
+                    prospect_external_id="relay-performance",
+                    summary=f"fetched {sum(1 for item in research_inputs if item.get('ok'))}/{len(research_inputs)} optimizer sources",
+                    payload_json=json.dumps(
+                        {
+                            "version": CURRENT_VERSION,
+                            "inputs": research_inputs,
+                            "fetched_at": now.isoformat(),
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+            )
+        session.commit()
+
+    return {
+        "status": "ok",
+        "summary": "weekly plan created",
+        "plan": plan,
+        "created": True,
+    }
+
+
+def maybe_run_weekly_performance_review() -> dict[str, Any]:
+    enabled = os.getenv("RELAY_WEEKLY_OPTIMIZER_ENABLED", "true").strip().lower() != "false"
+    if not enabled:
+        return {"status": "skipped", "summary": "weekly optimizer disabled"}
+    return run_weekly_performance_review(force=False, fetch_research=True)
+
+
+def active_relay_experiment() -> dict[str, Any]:
+    forced = os.getenv("RELAY_OUTREACH_VARIANT", "").strip()
+    if forced in EXPERIMENTS:
+        experiment = EXPERIMENTS[forced]
+        return {
+            "experiment_variant": forced,
+            "experiment_label": experiment["label"],
+            "hypothesis": experiment["hypothesis"],
+            "query_rotation": experiment["query_rotation"],
+            "source": "env",
+        }
+
+    week_start = _week_start()
+    with _session() as session:
+        plan = _current_week_plan_payload(session, week_start) or _latest_plan_payload(session)
+
+    if plan and str(plan.get("experiment_variant")) in EXPERIMENTS:
+        plan["source"] = "weekly_plan"
+        return plan
+
+    experiment = EXPERIMENTS[DEFAULT_EXPERIMENT_VARIANT]
+    return {
+        "experiment_variant": DEFAULT_EXPERIMENT_VARIANT,
+        "experiment_label": experiment["label"],
+        "hypothesis": experiment["hypothesis"],
+        "query_rotation": experiment["query_rotation"],
+        "source": "default",
+    }
+
+
+def active_relay_experiment_variant() -> str:
+    variant = str(active_relay_experiment().get("experiment_variant") or DEFAULT_EXPERIMENT_VARIANT)
+    return variant if variant in EXPERIMENTS else DEFAULT_EXPERIMENT_VARIANT
+
+
+def active_relay_query_hint(now: datetime | None = None) -> str | None:
+    plan = active_relay_experiment()
+    queries = [str(item).strip() for item in plan.get("query_rotation", []) if str(item).strip()]
+    if not queries:
+        return None
+    now = now or _now()
+    return queries[(now.timetuple().tm_yday + now.hour) % len(queries)]
+
+
+def relay_performance_status() -> dict[str, Any]:
+    now = _now()
+    week_start = _week_start(now)
+    with _session() as session:
+        current_week = _metrics_for_window(session, start=week_start, end=now)
+        prior_week = _metrics_for_window(
+            session,
+            start=week_start - timedelta(days=7),
+            end=week_start,
+        )
+        all_time_sends = _event_count(session, "custom_outreach_sent_step_%", like=True)
+        all_time_replies = (
+            _event_count(session, "custom_outreach_reply_seen")
+            + _event_count(session, "smartlead_reply")
+        )
+        latest_plan = _latest_plan_payload(session)
+        current_plan = _current_week_plan_payload(session, week_start)
+        latest_review = _event_payload(_latest_event(session, PERFORMANCE_REVIEW_EVENT))
+        research = _event_payload(_latest_event(session, RESEARCH_INPUT_EVENT))
+        prospect_health = _prospect_health(session)
+
+    return {
+        "status": "ok",
+        "version": CURRENT_VERSION,
+        "current_week": current_week,
+        "prior_week": prior_week,
+        "all_time": {
+            "sends": all_time_sends,
+            "replies": all_time_replies,
+            "reply_rate": round(all_time_replies / all_time_sends, 4) if all_time_sends else 0,
+        },
+        "prospect_health": prospect_health,
+        "active_experiment": current_plan or latest_plan or active_relay_experiment(),
+        "latest_review": latest_review,
+        "latest_research_input": research,
+        "available_experiments": EXPERIMENTS,
+    }

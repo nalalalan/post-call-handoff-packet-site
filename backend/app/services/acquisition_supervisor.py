@@ -416,6 +416,66 @@ async def import_from_apollo_search(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"status": "ok", "searched": len(items), "upserted": count}
 
 
+def _split_csv(value: str) -> list[str]:
+    return [x.strip() for x in str(value or "").split(",") if x.strip()]
+
+
+async def import_from_apollo_people_search(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Import named decision-makers instead of storefront contact inboxes."""
+    client = ApolloClient()
+
+    raw_apollo_payload = payload.get("apollo_payload")
+    search_payload: Dict[str, Any] = dict(raw_apollo_payload) if isinstance(raw_apollo_payload, dict) else {}
+    q_keywords = str(payload.get("q_keywords") or "").strip()
+
+    search_payload.setdefault("page", int(payload.get("page") or 1))
+    search_payload.setdefault("per_page", max(1, min(int(payload.get("per_page") or 25), 100)))
+    search_payload.setdefault("person_titles", payload.get("person_titles") or _split_csv(settings.acq_target_person_titles))
+    search_payload.setdefault("organization_locations", payload.get("organization_locations") or [settings.default_country])
+    search_payload.setdefault("contact_email_status", payload.get("contact_email_status") or ["verified", "guessed"])
+    if q_keywords:
+        search_payload.setdefault("q_keywords", q_keywords)
+
+    result = await client.search_people(search_payload)
+    rows = _extract_people_rows(result)
+
+    with _session() as session:
+        count = 0
+        for person in rows:
+            organization = person.get("organization") or {}
+            email = person.get("email") or person.get("contact_email") or ""
+            if not email:
+                continue
+
+            row = {
+                **person,
+                "id": person.get("id") or person.get("person_id") or email,
+                "person_id": person.get("id") or person.get("person_id") or "",
+                "company_name": organization.get("name") or person.get("company_name") or "",
+                "website": organization.get("website_url") or person.get("website_url") or person.get("website") or "",
+                "title": person.get("title") or "",
+                "headline": person.get("headline") or q_keywords,
+                "email": email,
+                "source": "apollo_people",
+            }
+            _upsert_prospect(session, row)
+            count += 1
+
+        session.commit()
+
+    return {
+        "status": "ok",
+        "source": "apollo_people",
+        "searched": len(rows),
+        "upserted": count,
+        "apollo_payload": {
+            key: value
+            for key, value in search_payload.items()
+            if key not in {"api_key", "password", "token"}
+        },
+    }
+
+
 async def enrich_unsent_prospects(limit: int = 10) -> int:
     with _session() as session:
         stmt = (

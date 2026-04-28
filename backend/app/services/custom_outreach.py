@@ -38,10 +38,10 @@ class SMTPMailbox:
     password: str
 
 
-STEP_TEMPLATES: list[StepTemplate] = [
+LEGACY_STEP_TEMPLATES: list[StepTemplate] = [
     StepTemplate(
         step_number=1,
-        subject="quick question",
+        subject="after-call follow-up",
         body=(
             "Hey —\n\n"
             "After a strong client call, do you ever end up with the recap / next steps / follow-up sitting longer than it should?\n\n"
@@ -53,7 +53,7 @@ STEP_TEMPLATES: list[StepTemplate] = [
     ),
     StepTemplate(
         step_number=2,
-        subject="re: quick question",
+        subject="re: after-call follow-up",
         body=(
             "Just following up once.\n\n"
             "This is the kind of output I mean:\n"
@@ -66,7 +66,7 @@ STEP_TEMPLATES: list[StepTemplate] = [
     ),
     StepTemplate(
         step_number=3,
-        subject="re: quick question",
+        subject="re: after-call follow-up",
         body=(
             "Last nudge.\n\n"
             "The easiest way to test it is one real call:\n"
@@ -78,6 +78,221 @@ STEP_TEMPLATES: list[StepTemplate] = [
         delay_after_prev_days=2,
     ),
 ]
+
+
+STEP_TEMPLATES = [
+    StepTemplate(
+        step_number=1,
+        subject="after-call follow-up",
+        body=(
+            "Hey - quick question.\n\n"
+            "When a good sales or client call ends, does your team already have someone who turns the messy notes into the recap, follow-up email, next steps, and CRM update the same day?\n\n"
+            "I built Relay for that after-call cleanup. No software setup - you send rough notes, and the finished handoff comes back ready to use.\n\n"
+            "Worth sending the sample?\n\n"
+            "- Alan"
+        ),
+        delay_after_prev_days=0,
+    ),
+    StepTemplate(
+        step_number=2,
+        subject="re: after-call follow-up",
+        body=(
+            "Following up once with the concrete version.\n\n"
+            "Sample packet:\n"
+            "{sample_url}\n\n"
+            "The use case is simple: send rough notes from one real call, get back the client-ready recap, follow-up draft, open questions, and CRM-ready update.\n\n"
+            "If you have one messy call from this week, I can turn it around as a $40 test.\n\n"
+            "- Alan"
+        ),
+        delay_after_prev_days=1,
+    ),
+    StepTemplate(
+        step_number=3,
+        subject="re: after-call follow-up",
+        body=(
+            "Last note from me.\n\n"
+            "If after-call follow-up is a real bottleneck, the lowest-friction test is one call for $40:\n"
+            "{packet_checkout_url}\n\n"
+            "More detail is here:\n"
+            "{landing_page_url}\n\n"
+            "If it is not relevant, no worries - I will not keep chasing.\n\n"
+            "- Alan"
+        ),
+        delay_after_prev_days=2,
+    ),
+]
+
+
+STEP_TEMPLATE_VARIANTS: dict[str, list[StepTemplate]] = {
+    "control_sample_ask": STEP_TEMPLATES,
+    "sample_first_plain": [
+        StepTemplate(
+            step_number=1,
+            subject="after-call follow-up",
+            body=(
+                "Hey - quick question.\n\n"
+                "I built Relay to turn rough notes from one sales or client call into the finished recap, follow-up draft, next steps, and CRM-ready update.\n\n"
+                "Here is the sample packet:\n"
+                "{sample_url}\n\n"
+                "If there is one messy follow-up from this week, worth testing the $40 version?\n\n"
+                "- Alan"
+            ),
+            delay_after_prev_days=0,
+        ),
+        StepTemplate(
+            step_number=2,
+            subject="re: after-call follow-up",
+            body=(
+                "Following up once.\n\n"
+                "The useful part is not more software. It is getting the post-call cleanup finished when the team is busy.\n\n"
+                "If you send rough notes from one real call, Relay sends back the recap, follow-up draft, open questions, and CRM-ready update.\n\n"
+                "Sample:\n"
+                "{sample_url}\n\n"
+                "- Alan"
+            ),
+            delay_after_prev_days=1,
+        ),
+        StepTemplate(
+            step_number=3,
+            subject="re: after-call follow-up",
+            body=(
+                "Last note from me.\n\n"
+                "If after-call cleanup is not a problem, no worries.\n\n"
+                "If it is, the smallest test is one call for $40:\n"
+                "{packet_checkout_url}\n\n"
+                "- Alan"
+            ),
+            delay_after_prev_days=2,
+        ),
+    ],
+    "pain_owner_direct": [
+        StepTemplate(
+            step_number=1,
+            subject="who owns after-call cleanup?",
+            body=(
+                "Hey - quick question for {company_name}.\n\n"
+                "After a strong client or sales call, who owns the recap, next steps, follow-up email, and CRM update?\n\n"
+                "I built Relay for that exact cleanup. Your team sends rough notes, and the finished handoff comes back ready to use.\n\n"
+                "If that is already handled, ignore me. If not, worth sending the sample?\n\n"
+                "- Alan"
+            ),
+            delay_after_prev_days=0,
+        ),
+        StepTemplate(
+            step_number=2,
+            subject="re: who owns after-call cleanup?",
+            body=(
+                "Following up once with the concrete version.\n\n"
+                "Sample packet:\n"
+                "{sample_url}\n\n"
+                "This is built for the gap after a good call: the work is obvious, but nobody wants to turn rough notes into a clean client-ready handoff.\n\n"
+                "Worth testing on one real call?\n\n"
+                "- Alan"
+            ),
+            delay_after_prev_days=1,
+        ),
+        StepTemplate(
+            step_number=3,
+            subject="re: who owns after-call cleanup?",
+            body=(
+                "Last note from me.\n\n"
+                "If post-call cleanup is not costing time, no worries.\n\n"
+                "If one call is worth testing, the $40 version is here:\n"
+                "{packet_checkout_url}\n\n"
+                "- Alan"
+            ),
+            delay_after_prev_days=2,
+        ),
+    ],
+    "paid_test_explicit": [
+        StepTemplate(
+            step_number=1,
+            subject="one-call cleanup test",
+            body=(
+                "Hey - quick question.\n\n"
+                "I am testing a $40 done-for-you Relay: send rough notes from one sales or client call, get back the recap, follow-up draft, next steps, and CRM-ready update.\n\n"
+                "Sample:\n"
+                "{sample_url}\n\n"
+                "Would one messy call from this week be worth trying?\n\n"
+                "- Alan"
+            ),
+            delay_after_prev_days=0,
+        ),
+        StepTemplate(
+            step_number=2,
+            subject="re: one-call cleanup test",
+            body=(
+                "Following up once.\n\n"
+                "The test is intentionally small: one real call, $40, finished handoff back to you.\n\n"
+                "If it saves even one delayed follow-up, it should be obvious quickly.\n\n"
+                "{packet_checkout_url}\n\n"
+                "- Alan"
+            ),
+            delay_after_prev_days=1,
+        ),
+        StepTemplate(
+            step_number=3,
+            subject="re: one-call cleanup test",
+            body=(
+                "Last note from me.\n\n"
+                "If this is not relevant, no worries - I will not keep chasing.\n\n"
+                "If it is relevant later, sample is here:\n"
+                "{sample_url}\n\n"
+                "- Alan"
+            ),
+            delay_after_prev_days=2,
+        ),
+    ],
+}
+
+
+def _active_experiment_context() -> dict[str, Any]:
+    try:
+        from app.services.relay_performance import active_relay_experiment
+
+        experiment = active_relay_experiment()
+    except Exception as exc:
+        experiment = {
+            "experiment_variant": "control_sample_ask",
+            "experiment_label": "Control: sample ask",
+            "source": "fallback",
+            "error": str(exc),
+        }
+
+    variant = str(experiment.get("experiment_variant") or "control_sample_ask")
+    if variant not in STEP_TEMPLATE_VARIANTS:
+        variant = "control_sample_ask"
+    experiment["experiment_variant"] = variant
+    return experiment
+
+
+def _templates_for_variant(variant: str) -> list[StepTemplate]:
+    return STEP_TEMPLATE_VARIANTS.get(variant) or STEP_TEMPLATE_VARIANTS["control_sample_ask"]
+
+
+def _prospect_variant(sent_events: list[AcquisitionEvent], fallback_variant: str) -> str:
+    for event in sent_events:
+        payload = _safe_json_loads(event.payload_json)
+        variant = str(payload.get("experiment_variant") or "").strip()
+        if variant in STEP_TEMPLATE_VARIANTS:
+            return variant
+    return fallback_variant if fallback_variant in STEP_TEMPLATE_VARIANTS else "control_sample_ask"
+
+
+GENERIC_INBOX_LOCAL_PARTS = {
+    "admin",
+    "contact",
+    "hello",
+    "hi",
+    "info",
+    "inquiries",
+    "mail",
+    "marketing",
+    "office",
+    "sales",
+    "support",
+    "team",
+}
 
 
 def _session() -> Session:
@@ -144,7 +359,24 @@ def _monthly_autopilot_url() -> str:
 
 
 def _landing_page_url() -> str:
-    return getattr(settings, "landing_page_url", "") or os.getenv("LANDING_PAGE_URL", "").strip()
+    url = os.getenv("LANDING_PAGE_URL", "").strip() or getattr(settings, "landing_page_url", "").strip()
+    if not url or "nalalalan.github.io/alan-operator-site" in url:
+        return "https://relay.aolabs.io"
+    return url.rstrip("/")
+
+
+def _sample_url() -> str:
+    return _landing_page_url().rstrip("/") + "/sample.pdf"
+
+
+def _is_generic_inbox(email_address: str) -> bool:
+    local = (email_address or "").split("@", 1)[0].strip().lower()
+    if not local:
+        return True
+    local_base = local.replace(".", "").replace("-", "").replace("_", "")
+    if local in GENERIC_INBOX_LOCAL_PARTS or local_base in GENERIC_INBOX_LOCAL_PARTS:
+        return True
+    return local.startswith(("info", "hello", "contact", "admin", "support", "sales"))
 
 
 def _render_body(template: StepTemplate, prospect: AcquisitionProspect) -> str:
@@ -156,6 +388,7 @@ def _render_body(template: StepTemplate, prospect: AcquisitionProspect) -> str:
         weekly_sprint_url=_weekly_sprint_url(),
         monthly_autopilot_url=_monthly_autopilot_url(),
         landing_page_url=_landing_page_url(),
+        sample_url=_sample_url(),
     )
 
 
@@ -200,17 +433,22 @@ def _has_any_reply(session: Session, external_id: str) -> bool:
     return int(count or 0) > 0
 
 
-def _step_due(prospect: AcquisitionProspect, sent_events: list[AcquisitionEvent]) -> StepTemplate | None:
+def _step_due(
+    prospect: AcquisitionProspect,
+    sent_events: list[AcquisitionEvent],
+    templates: list[StepTemplate] | None = None,
+) -> StepTemplate | None:
+    templates = templates or STEP_TEMPLATES
     if prospect.status in {"paid", "intake_received", "replied", "manual_review"}:
         return None
 
     if not sent_events:
-        return STEP_TEMPLATES[0]
+        return templates[0]
 
-    if len(sent_events) >= len(STEP_TEMPLATES):
+    if len(sent_events) >= len(templates):
         return None
 
-    next_step = STEP_TEMPLATES[len(sent_events)]
+    next_step = templates[len(sent_events)]
     last_sent = sent_events[-1].created_at
     if last_sent is None:
         return next_step
@@ -415,8 +653,24 @@ def _daily_send_count(session: Session) -> int:
     return int(count or 0)
 
 
+def _total_send_count(session: Session) -> int:
+    count = session.execute(
+        select(func.count(AcquisitionEvent.id))
+        .where(AcquisitionEvent.event_type.like("custom_outreach_sent_step_%"))
+    ).scalar()
+    return int(count or 0)
+
+
 def send_due_sequence_messages(limit: int | None = None) -> dict[str, Any]:
-    limit = limit or settings.buyer_acq_daily_send_cap
+    experiment = _active_experiment_context()
+    active_variant = str(experiment.get("experiment_variant") or "control_sample_ask")
+    base_cap = max(int(settings.buyer_acq_daily_send_cap or 0), 1)
+    try:
+        experiment_cap = int(experiment.get("daily_cap_recommendation") or base_cap)
+    except Exception:
+        experiment_cap = base_cap
+    effective_daily_cap = max(min(experiment_cap, base_cap), 1)
+    limit = min(limit or effective_daily_cap, effective_daily_cap)
     sent = 0
     skipped = 0
     failures: list[dict[str, Any]] = []
@@ -430,6 +684,8 @@ def send_due_sequence_messages(limit: int | None = None) -> dict[str, Any]:
             "skipped_count": 0,
             "failures": [],
             "send_window": window,
+            "experiment": experiment,
+            "effective_daily_cap": effective_daily_cap,
         }
 
     with _session() as session:
@@ -445,8 +701,14 @@ def send_due_sequence_messages(limit: int | None = None) -> dict[str, Any]:
                 .order_by(AcquisitionProspect.created_at.asc())
             ).scalars().all()
         )
+        prospects.sort(
+            key=lambda prospect: (
+                _is_generic_inbox(prospect.contact_email),
+                prospect.created_at or datetime.min,
+            )
+        )
 
-        remaining_cap = max(settings.buyer_acq_daily_send_cap - _daily_send_count(session), 0)
+        remaining_cap = max(effective_daily_cap - _daily_send_count(session), 0)
 
         for prospect in prospects:
             if sent >= limit or remaining_cap <= 0:
@@ -457,7 +719,9 @@ def send_due_sequence_messages(limit: int | None = None) -> dict[str, Any]:
                 continue
 
             sent_events = _sent_events_for_prospect(session, prospect.external_id)
-            step = _step_due(prospect, sent_events)
+            prospect_variant = _prospect_variant(sent_events, active_variant)
+            templates = _templates_for_variant(prospect_variant)
+            step = _step_due(prospect, sent_events, templates)
             if step is None:
                 skipped += 1
                 continue
@@ -485,6 +749,9 @@ def send_due_sequence_messages(limit: int | None = None) -> dict[str, Any]:
                         "contact_name": prospect.contact_name,
                         "body_preview": _preview_text(plain_text, limit=240),
                         "plain_text": plain_text,
+                        "experiment_variant": prospect_variant,
+                        "experiment_label": experiment.get("experiment_label", ""),
+                        "experiment_source": experiment.get("source", ""),
                         **result,
                     },
                 )
@@ -499,7 +766,11 @@ def send_due_sequence_messages(limit: int | None = None) -> dict[str, Any]:
                     "custom_outreach_send_failed",
                     prospect.external_id,
                     "custom outreach send failed",
-                    {"error": str(exc), "step_number": step.step_number},
+                    {
+                        "error": str(exc),
+                        "step_number": step.step_number,
+                        "experiment_variant": prospect_variant,
+                    },
                 )
                 session.commit()
 
@@ -508,6 +779,8 @@ def send_due_sequence_messages(limit: int | None = None) -> dict[str, Any]:
         "sent_count": sent,
         "skipped_count": skipped,
         "failures": failures,
+        "experiment": experiment,
+        "effective_daily_cap": effective_daily_cap,
     }
 
 
@@ -630,6 +903,8 @@ def poll_reply_mailbox(limit: int | None = None) -> dict[str, Any]:
 
 
 def _due_now_count(session: Session) -> int:
+    experiment = _active_experiment_context()
+    active_variant = str(experiment.get("experiment_variant") or "control_sample_ask")
     prospects = list(
         session.execute(
             select(AcquisitionProspect)
@@ -648,7 +923,8 @@ def _due_now_count(session: Session) -> int:
         if _has_any_reply(session, prospect.external_id):
             continue
         sent_events = _sent_events_for_prospect(session, prospect.external_id)
-        if _step_due(prospect, sent_events) is not None:
+        prospect_variant = _prospect_variant(sent_events, active_variant)
+        if _step_due(prospect, sent_events, _templates_for_variant(prospect_variant)) is not None:
             due += 1
 
     return due
@@ -821,8 +1097,16 @@ def _recent_auto_reply_events(session: Session, limit: int = 8) -> list[dict[str
     return items
 
 def outreach_status() -> dict[str, Any]:
+    experiment = _active_experiment_context()
+    configured_daily_cap = max(int(settings.buyer_acq_daily_send_cap or 0), 1)
+    try:
+        experiment_cap = int(experiment.get("daily_cap_recommendation") or configured_daily_cap)
+    except Exception:
+        experiment_cap = configured_daily_cap
+    effective_daily_cap = max(min(experiment_cap, configured_daily_cap), 1)
     with _session() as session:
         sent_today = _daily_send_count(session)
+        total_sends_all_time = _total_send_count(session)
         replies_today = int(
             session.execute(
                 select(func.count(AcquisitionEvent.id))
@@ -844,6 +1128,19 @@ def outreach_status() -> dict[str, Any]:
             ).scalar()
             or 0
         )
+        active_emails = list(
+            session.execute(
+                select(AcquisitionProspect.contact_email)
+                .where(AcquisitionProspect.contact_email != "")
+                .where(
+                    AcquisitionProspect.status.in_(
+                        ["scored", "queued_to_sender", "sent_custom", "sent_to_smartlead"]
+                    )
+                )
+            ).scalars().all()
+        )
+        generic_inbox_count = sum(1 for email_address in active_emails if _is_generic_inbox(email_address))
+        direct_inbox_count = max(len(active_emails) - generic_inbox_count, 0)
 
         due_now_count = _due_now_count(session)
         sender_counts = _smtp_daily_counts(session) if _smtp_enabled() else {}
@@ -857,9 +1154,13 @@ def outreach_status() -> dict[str, Any]:
         "queued_count": due_now_count,
         "due_now_count": due_now_count,
         "in_sequence_count": in_sequence_count,
+        "direct_inbox_count": direct_inbox_count,
+        "generic_inbox_count": generic_inbox_count,
         "sent_today": sent_today,
+        "total_sends_all_time": total_sends_all_time,
         "replies_today": replies_today,
-        "daily_send_cap": settings.buyer_acq_daily_send_cap,
+        "daily_send_cap": effective_daily_cap,
+        "configured_daily_send_cap": configured_daily_cap,
         "provider": "smtp" if _smtp_enabled() else "resend",
         "sender_counts_today": sender_counts,
         "smtp_mailboxes_configured": len(_smtp_mailboxes()) if _smtp_enabled() else 0,
@@ -869,6 +1170,7 @@ def outreach_status() -> dict[str, Any]:
         "recent_sent": recent_sent,
         "recent_replies": recent_replies,
         "recent_auto_replies": recent_auto_replies,
+        "active_experiment": experiment,
         "send_window_timezone": window["timezone"],
         "send_window_now_local": window["now_local"],
         "send_window_start_local": window["start_local"],

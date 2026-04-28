@@ -52,6 +52,8 @@ def _cors_origins() -> list[str]:
         "https://www.liverelay.aolabs.io",
         "https://relaylive.aolabs.io",
         "https://www.relaylive.aolabs.io",
+        "http://relaylive.aolabs.io",
+        "http://www.relaylive.aolabs.io",
         "https://nalalalan.github.io",
         "https://nalalalan.github.io/alan-operator-site",
         "http://localhost:3000",
