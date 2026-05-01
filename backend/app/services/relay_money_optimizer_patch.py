@@ -710,6 +710,7 @@ def optimized_send_due_sequence_messages(limit: int | None = None) -> dict[str, 
                         "active_experiment_variant": active_variant,
                         "active_experiment_label": active_experiment.get("experiment_label"),
                         "body_preview": outreach._preview_text(plain_text, limit=240),
+                        "body_text": plain_text,
                         **result,
                     },
                 )
