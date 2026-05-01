@@ -362,12 +362,62 @@ def _next_money_move(status: dict[str, Any]) -> str:
     return "Refill direct decision-maker leads before increasing volume."
 
 
+def _fallback_status(error: Exception) -> dict[str, Any]:
+    daily_cap = int(settings.buyer_acq_daily_send_cap or 0)
+    return {
+        "queued_count": 0,
+        "due_now_count": 0,
+        "in_sequence_count": 0,
+        "direct_inbox_count": 0,
+        "generic_inbox_count": 0,
+        "sent_today": 0,
+        "total_sends_all_time": 0,
+        "total_replies_all_time": 0,
+        "replies_today": 0,
+        "daily_send_cap": daily_cap,
+        "recent_sent": [],
+        "recent_replies": [],
+        "active_experiment": _active_experiment(),
+        "send_window_is_open": False,
+        "status_warning": f"base_status_unavailable:{type(error).__name__}",
+    }
+
+
+def _fallback_quality(status: dict[str, Any], error: Exception) -> dict[str, Any]:
+    sent_today = int(status.get("sent_today") or 0)
+    daily_cap = int(status.get("daily_send_cap") or settings.buyer_acq_daily_send_cap or 0)
+    due_now = int(status.get("due_now_count") or status.get("queued_count") or 0)
+    return {
+        "direct_inbox_count": int(status.get("direct_inbox_count") or 0),
+        "generic_inbox_count": int(status.get("generic_inbox_count") or 0),
+        "blocked_bad_email_count": int(status.get("blocked_bad_email_count") or 0),
+        "direct_due_count": int(status.get("direct_due_count") or due_now),
+        "generic_due_count": int(status.get("generic_due_count") or 0),
+        "sendable_due_count": due_now,
+        "generic_paused_count": int(status.get("generic_paused_count") or 0),
+        "cap_remaining": int(status.get("cap_remaining") or max(daily_cap - sent_today, 0)),
+        "total_replies_all_time": int(
+            status.get("total_replies_all_time")
+            or status.get("all_time_replies")
+            or status.get("replies_today")
+            or 0
+        ),
+        "quality_snapshot_warning": type(error).__name__,
+    }
+
+
 def optimized_outreach_status() -> dict[str, Any]:
     assert _original_outreach_status is not None
-    status = _original_outreach_status()
+    try:
+        status = _original_outreach_status()
+    except Exception as exc:
+        status = _fallback_status(exc)
 
-    with SessionLocal() as session:
-        quality = _quality_snapshot(session)
+    try:
+        with SessionLocal() as session:
+            quality = _quality_snapshot(session)
+    except Exception as exc:
+        quality = _fallback_quality(status, exc)
 
     status.update(quality)
     status["raw_due_now_count"] = int(status.get("due_now_count") or 0)
