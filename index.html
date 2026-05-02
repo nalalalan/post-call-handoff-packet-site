@@ -4,12 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Relay by AO Labs</title>
-  <meta name="description" content="Relay turns rough call notes into polished handoff packets, follow-up drafts, and CRM-ready next steps." />
+  <meta name="description" content="Send messy sales-call notes. Relay turns them into a finished recap, follow-up email, CRM notes, and next-step checklist." />
   <link rel="canonical" href="https://relay.aolabs.io/" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="AO Labs" />
   <meta property="og:title" content="Relay by AO Labs" />
-  <meta property="og:description" content="Turn rough call notes into client-ready follow-up, handoff packets, and next steps." />
+  <meta property="og:description" content="Send messy sales-call notes. Relay turns them into a finished recap, follow-up email, CRM notes, and next-step checklist." />
   <meta property="og:url" content="https://relay.aolabs.io/" />
   <meta property="og:image" content="https://relay.aolabs.io/og-image.png" />
   <meta property="og:image:secure_url" content="https://relay.aolabs.io/og-image.png" />
@@ -19,7 +19,7 @@
   <meta property="og:image:alt" content="Relay by AO Labs preview image." />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Relay by AO Labs" />
-  <meta name="twitter:description" content="Turn rough call notes into client-ready follow-up, handoff packets, and next steps." />
+  <meta name="twitter:description" content="Send messy sales-call notes. Relay turns them into a finished recap, follow-up email, CRM notes, and next-step checklist." />
   <meta name="twitter:image" content="https://relay.aolabs.io/og-image.png" />
   <meta name="twitter:image:alt" content="Relay by AO Labs preview image." />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -952,7 +952,23 @@
   outline: none;
 }
 
-.relay-intent-form input:focus {
+.relay-intent-form textarea {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  border-radius: 18px;
+  border: 1.5px solid var(--line);
+  background: rgba(255,255,255,.66);
+  padding: 16px;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.38;
+  outline: none;
+}
+
+.relay-intent-form input:focus,
+.relay-intent-form textarea:focus {
   border-color: rgba(191, 134, 81, .65);
   box-shadow: 0 0 0 4px rgba(191, 134, 81, .12);
 }
@@ -998,7 +1014,7 @@
           <a href="#sample">Sample</a>
           <a href="#why-not-ai">Why not just ChatGPT?</a>
         </div>
-        <a class="btn btn-primary checkout-link" href="#buy">Start the $40 relay</a>
+        <a class="btn btn-primary note-intake-link" href="#send-notes">Send messy notes</a>
       </nav>
     </div>
   </header>
@@ -1008,14 +1024,14 @@
       <div class="wrap">
         <div class="hero-grid">
           <div class="hero-main">
-            <div class="eyebrow">Post-call handoff relay for founder-led agencies</div>
-            <h1 class="hero-title">You open ChatGPT. You paste notes. You never finish it. Relay finishes it.</h1>
-            <p class="hero-copy">Drop rough call notes. Get the recap, next steps, follow-up draft, and CRM-ready update done for you.</p>
+            <div class="eyebrow">Same-day call cleanup for agency founders</div>
+            <h1 class="hero-title">Send messy sales-call notes. Get the finished follow-up packet.</h1>
+            <p class="hero-copy">Relay turns one real call into a client-ready recap, follow-up email, CRM notes, and next-step checklist. Send notes first. Pay after I confirm I can clean it up.</p>
             <div class="hero-actions">
-              <a class="btn btn-primary checkout-link" href="#buy">Start the $40 relay</a>
+              <a class="btn btn-primary note-intake-link" href="#send-notes">Send messy notes</a>
               <a class="btn btn-secondary" href="sample.pdf" target="_blank" rel="noopener">Open sample PDF</a>
             </div>
-            <p class="hero-proofline"><strong>Not another ChatGPT tab.</strong> The ugly after-call work, finished and returned the same day.</p>
+            <p class="hero-proofline"><strong>No checkout wall first.</strong> Send one messy note dump. I review it, confirm the relay, then ask for payment.</p>
           </div>
 
           <div class="hero-side">
@@ -1047,7 +1063,7 @@
             </div>
           </div>
 
-          <p class="founder-copy">Before my PhD, I spent about three years working as a design and mechanical engineer in industry, where a big part of the job was not just designing things but pushing real work across the line with customers, managers, vendors, and follow-through. I built Relay because I got tired of seeing good conversations create momentum and then quietly die because nobody wanted to own the ugly work after the call — recap, next steps, follow-up, and CRM cleanup. That always felt stupid and avoidable to me. Relay is my way of making sure the work after a strong call actually gets finished.</p>
+          <p class="founder-copy">Before my PhD, I spent about three years working as a design and mechanical engineer in industry, where a big part of the job was not just designing things but pushing real work across the line with customers, managers, vendors, and follow-through. I built Relay because I got tired of seeing good conversations create momentum and then quietly die because nobody wanted to own the ugly work after the call: recap, next steps, follow-up, and CRM cleanup. Relay is my way of making sure the work after a strong call actually gets finished.</p>
 
           <div class="founder-pills">
             <div class="founder-pill">Real sample relay on the page</div>
@@ -1131,23 +1147,23 @@
         <div class="section-heading">
           <div class="section-kicker">How it works</div>
           <h2 class="section-title">Three moves. That's it.</h2>
-          <p class="section-subtitle">This is a single paid delivery path. Buy first, then the intake link unlocks automatically.</p>
+          <p class="section-subtitle">This is now notes-first. No one has to pay before the call notes are real enough to clean up.</p>
         </div>
         <div class="steps-grid">
           <article class="step-card">
             <div class="step-num">1</div>
-            <h3>Start the relay</h3>
-            <p>Pay once for one real call. This is the low-friction proof step.</p>
+            <h3>Send messy notes</h3>
+            <p>Paste bullets, fragments, screenshots, or the rough dump from one real sales or client call.</p>
           </article>
           <article class="step-card">
             <div class="step-num">2</div>
-            <h3>Get intake access</h3>
-            <p>Checkout unlocks the paid intake page so you can send rough notes from one real call.</p>
+            <h3>I confirm the relay</h3>
+            <p>If the notes are enough to work from, I reply with the fixed scope and payment link.</p>
           </article>
           <article class="step-card">
             <div class="step-num">3</div>
-            <h3>Get the relay back</h3>
-            <p>Use the output immediately for follow-up, CRM, and proposal motion the same day.</p>
+            <h3>Get it back today</h3>
+            <p>You get the recap, follow-up email, CRM update, and next-step checklist ready to use.</p>
           </article>
         </div>
       </div>
@@ -1189,17 +1205,18 @@
 
     
 <!-- RELAY_INTENT_CAPTURE_START -->
-<section class="section relay-intent-section" id="relay-sample-request">
+<section class="section relay-intent-section" id="send-notes">
   <div class="wrap">
     <div class="relay-intent-card">
       <div>
-        <div class="section-kicker">Not ready to buy yet?</div>
-        <h2 class="relay-intent-title">Get the sample in your inbox first.</h2>
-        <p class="relay-intent-copy">If you are even slightly curious, leave a work email. Relay sends the sample link now and logs the request so Alan can follow up with a one-call test path.</p>
+        <div class="section-kicker">Notes-first intake</div>
+        <h2 class="relay-intent-title">Send one messy call note.</h2>
+        <p class="relay-intent-copy">Agency owners and founders: paste the messy version. I will tell you if I can turn it into a finished relay today. If yes, I send the payment link and get it done.</p>
       </div>
-      <form class="relay-intent-form" data-relay-lead-source="sample_request">
+      <form class="relay-intent-form" data-relay-lead-source="messy_notes">
         <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="work email" required />
-        <button class="btn btn-primary" type="submit">Email me the sample</button>
+        <textarea name="notes" placeholder="Paste messy call notes, screenshot text, buyer context, or what you remember. Rough is fine." required></textarea>
+        <button class="btn btn-primary" type="submit">Send notes</button>
         <div class="relay-intent-status" aria-live="polite"></div>
       </form>
     </div>
@@ -1212,15 +1229,13 @@
       <div class="wrap">
         <div class="cta-card">
           <div>
-            <div class="section-kicker">Final CTA</div>
-            <h2 class="cta-title">Don't buy this if you're happy doing it yourself in ChatGPT.</h2>
-            <p class="cta-subcopy">Buy this if you want to send rough notes and get the finished recap, next steps, follow-up draft, and CRM update back without touching the cleanup yourself.</p>
+            <div class="section-kicker">Clear offer</div>
+            <h2 class="cta-title">One call becomes one finished follow-up packet.</h2>
+            <p class="cta-subcopy">You send the rough notes. I return the recap, follow-up email, CRM notes, and next-step checklist. The primary path is to send notes first; checkout is here if you already know you want the relay.</p>
           </div>
           <div class="cta-actions">
-            <a class="btn btn-primary checkout-link" href="#buy">Start the $40 relay</a>
-            <a class="btn btn-secondary packet-5-link" href="#buy">5-call sprint</a>
-            <a class="btn btn-secondary weekly-link" href="#buy">Done-for-you week</a>
-            <a class="btn btn-secondary monthly-link" href="#buy">Done-for-you month</a>
+            <a class="btn btn-primary note-intake-link" href="#send-notes">Send messy notes</a>
+            <a class="btn btn-secondary checkout-link" href="#buy">Pay for one relay</a>
           </div>
         </div>
       </div>
@@ -1364,6 +1379,7 @@
       var text = (link.textContent || '').trim();
 
       if (link.classList.contains('checkout-link')) return 'checkout_click';
+      if (link.classList.contains('note-intake-link')) return 'note_intake_click';
       if (link.classList.contains('packet-5-link') || link.classList.contains('weekly-link') || link.classList.contains('monthly-link')) return 'pricing_click';
       if (href.indexOf('sample.pdf') >= 0) return 'sample_click';
       if (href.indexOf('client-intake') >= 0) return 'client_gate_click';
@@ -1396,14 +1412,16 @@
         event.preventDefault();
 
         var input = form.querySelector('input[name="email"]');
+        var notesInput = form.querySelector('textarea[name="notes"]');
         var button = form.querySelector('button[type="submit"]');
         var status = form.querySelector('.relay-intent-status');
         var email = input && input.value ? input.value.trim() : '';
+        var notes = notesInput && notesInput.value ? notesInput.value.trim() : '';
 
-        if (!email) return;
+        if (!email || !notes) return;
 
         if (button) button.disabled = true;
-        if (status) status.textContent = 'sending sample...';
+        if (status) status.textContent = 'sending notes...';
 
         var payload = {
           session_id: sessionId(),
@@ -1413,18 +1431,24 @@
           referrer: document.referrer || '',
           metadata: {
             path: location.pathname,
-            title: document.title
+            title: document.title,
+            notes: notes.slice(0, 5000),
+            note_length: notes.length,
+            offer: 'notes_first_manual_followup'
           }
         };
 
         postJSON(leadUrl(), payload, 'lead').then(function (result) {
           track('lead_capture_submit', { email_domain: email.split('@')[1] || '', source: payload.source });
           var emailResult = result && result.sample_email ? result.sample_email : {};
-          if (result && result.ok && emailResult.status === 'sent') {
+          if (result && result.ok && payload.source === 'messy_notes') {
+            if (status) status.textContent = 'notes received. Alan will reply with next step.';
+            form.reset();
+          } else if (result && result.ok && emailResult.status === 'sent') {
             if (status) status.textContent = 'sample sent. check your inbox.';
             form.reset();
           } else if (result && result.ok) {
-            if (status) status.textContent = 'request saved. sample email needs backend attention.';
+            if (status) status.textContent = 'request saved.';
             form.reset();
           } else if (status) {
             status.textContent = 'could not reach backend. request saved in this browser only.';

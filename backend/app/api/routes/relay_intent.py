@@ -112,6 +112,52 @@ def _send_sample_email(to_email: str) -> dict[str, Any]:
         return {"status": "failed", "reason": str(exc)[:500]}
 
 
+def _send_messy_notes_email(payload: RelayIntentLeadIn, email: str, score: int) -> dict[str, Any]:
+    if not settings.resend_api_key:
+        return {"status": "skipped", "reason": "RESEND_API_KEY is not configured"}
+
+    metadata = payload.metadata or {}
+    notes = str(metadata.get("notes") or "").strip()[:5000]
+    note_length = metadata.get("note_length") or len(notes)
+    page_url = payload.page_url or _relay_url()
+    safe_email = escape(email)
+    safe_notes = escape(notes or "(No notes captured.)").replace("\n", "<br>")
+    safe_page = escape(page_url)
+
+    html = f"""
+    <div style="font-family:Arial,sans-serif;line-height:1.55;color:#221b17;max-width:720px">
+      <p><strong>New Relay messy-notes submission</strong></p>
+      <p><strong>Email:</strong> {safe_email}<br>
+      <strong>Score:</strong> {score}<br>
+      <strong>Note length:</strong> {escape(str(note_length))}</p>
+      <div style="padding:14px 16px;border:1px solid #ead3c8;border-radius:12px;background:#fffaf6">
+        {safe_notes}
+      </div>
+      <p style="font-size:13px;color:#756961">
+        Source page: <a href="{safe_page}" style="color:#756961">{safe_page}</a>
+      </p>
+    </div>
+    """.strip()
+
+    try:
+        from app.integrations.resend_client import ResendClient
+
+        response = ResendClient().send_email(
+            to_email=settings.reply_to_email,
+            subject=f"New Relay notes from {email}",
+            html=html,
+            from_email=settings.from_email_fulfillment or settings.from_email_outbound,
+            reply_to=email,
+        )
+        return {
+            "status": "sent",
+            "provider": "resend",
+            "provider_id": response.get("id") if isinstance(response, dict) else None,
+        }
+    except Exception as exc:
+        return {"status": "failed", "reason": str(exc)[:500]}
+
+
 def _user_agent(request: Request) -> str | None:
     ua = request.headers.get("user-agent")
     return ua[:1000] if ua else None
@@ -305,10 +351,16 @@ def record_relay_lead(payload: RelayIntentLeadIn, request: Request) -> dict[str,
         db.commit()
         db.refresh(lead)
 
+        source_lower = source.lower()
         sample_email = (
             _send_sample_email(email)
-            if "sample" in source.lower()
+            if "sample" in source_lower
             else {"status": "skipped", "reason": "not a sample request"}
+        )
+        operator_email = (
+            _send_messy_notes_email(payload, email, score)
+            if "messy_notes" in source_lower
+            else {"status": "skipped", "reason": "not a messy notes request"}
         )
         try:
             db.add(
@@ -324,16 +376,43 @@ def record_relay_lead(payload: RelayIntentLeadIn, request: Request) -> dict[str,
                             "source": source,
                             "score": score,
                             "sample_email": sample_email,
+                            "operator_email": operator_email,
                         },
                         ensure_ascii=False,
                     ),
                 )
             )
+            if "messy_notes" in source_lower:
+                db.add(
+                    AcquisitionEvent(
+                        event_type=f"relay_messy_notes_email_{operator_email.get('status', 'unknown')}",
+                        prospect_external_id=f"relay-lead:{lead.id}",
+                        summary=f"messy notes email {operator_email.get('status', 'unknown')} for {email}",
+                        payload_json=json.dumps(
+                            {
+                                "lead_id": lead.id,
+                                "session_id": sid,
+                                "email": email,
+                                "source": source,
+                                "score": score,
+                                "operator_email": operator_email,
+                            },
+                            ensure_ascii=False,
+                        ),
+                    )
+                )
             db.commit()
         except Exception:
             db.rollback()
 
-        return {"ok": True, "lead_id": lead.id, "session_id": sid, "score": score, "sample_email": sample_email}
+        return {
+            "ok": True,
+            "lead_id": lead.id,
+            "session_id": sid,
+            "score": score,
+            "sample_email": sample_email,
+            "operator_email": operator_email,
+        }
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"could not record relay lead: {exc}") from exc
