@@ -14,13 +14,110 @@ from app.services.relay_performance import (
     relay_performance_status,
     run_weekly_performance_review,
 )
+from app.services.relay_success_controller import relay_success_status
 
 router = APIRouter()
 
 
+def _safe_int(value: object, default: int = 0) -> int:
+    try:
+        return int(value or default)
+    except Exception:
+        return default
+
+
+def _nested(mapping: dict, key: str) -> dict:
+    value = mapping.get(key) if isinstance(mapping, dict) else {}
+    return value if isinstance(value, dict) else {}
+
+
+def _operator_mode(status: dict, success: dict) -> dict:
+    snapshot = _nested(success, "snapshot")
+    money = _nested(snapshot, "money")
+    intent = _nested(snapshot, "intent")
+    outreach = _nested(snapshot, "outreach")
+
+    bottleneck = str(success.get("bottleneck") or "").strip()
+    payments = _safe_int(money.get("payments"))
+    replies = _safe_int(
+        outreach.get("replies")
+        or status.get("total_replies_all_time")
+        or status.get("replies_today")
+    )
+    checkout_clicks = _safe_int(intent.get("checkout_clicks"))
+    due = _safe_int(outreach.get("due_now") or status.get("due_now_count"))
+    cap_remaining = _safe_int(outreach.get("cap_remaining") or status.get("cap_remaining"))
+    active_due = _safe_int(
+        outreach.get("active_experiment_new_due_count")
+        or status.get("active_experiment_new_due_count")
+    )
+    active_needs_sample = bool(
+        outreach.get("active_experiment_needs_sample")
+        or status.get("active_experiment_needs_sample")
+    )
+    ready_due = active_due if active_needs_sample else due
+    send_window_open = bool(outreach.get("send_window_is_open") or status.get("send_window_is_open"))
+    money_loop = _nested(status, "money_loop")
+    loop_status = str(money_loop.get("status") or "").strip()
+
+    urgent = {
+        "infrastructure_blocked",
+        "paid_fulfillment",
+        "checkout_to_payment",
+        "reply_to_payment",
+        "outbound_send_failed",
+        "outbound_send_stalled",
+    }
+    followup = {"messy_notes_to_payment", "sample_to_notes"}
+
+    if loop_status in {"disabled", "error", "stuck", "late"}:
+        return {"mode": "attention_required", "do_not_interrupt_user": False, "reason": f"money loop is {loop_status}"}
+    if bottleneck in urgent or replies > payments or checkout_clicks > payments:
+        return {
+            "mode": "attention_required",
+            "do_not_interrupt_user": False,
+            "reason": success.get("next_action") or bottleneck or "buyer signal needs handling",
+        }
+    if bottleneck in followup:
+        return {
+            "mode": "autonomous_followup_due",
+            "do_not_interrupt_user": True,
+            "reason": success.get("next_action") or "Relay has a follow-up queued",
+        }
+    if ready_due > 0 and cap_remaining > 0 and send_window_open:
+        return {
+            "mode": "autonomous_sending_now",
+            "do_not_interrupt_user": True,
+            "reason": "send window is open and queued leads are ready",
+        }
+    if ready_due > 0 and cap_remaining > 0:
+        return {
+            "mode": "out_of_loop_waiting",
+            "do_not_interrupt_user": True,
+            "reason": "queued leads are ready for the next send window",
+        }
+    return {
+        "mode": "out_of_loop_monitoring",
+        "do_not_interrupt_user": True,
+        "reason": success.get("next_action") or "no immediate human action",
+    }
+
+
+def _status_with_operator_mode() -> dict:
+    status = outreach_status()
+    try:
+        success = relay_success_status()
+    except Exception as error:
+        success = {"status": "error", "bottleneck": "status_unavailable", "next_action": str(error)}
+    status["operator_mode"] = _operator_mode(status, success)
+    status["relay_success_bottleneck"] = success.get("bottleneck")
+    status["relay_success_next_action"] = success.get("next_action")
+    return status
+
+
 @router.get("/status")
 async def custom_outreach_status(_: None = Depends(require_relay_admin)) -> dict:
-    return outreach_status()
+    return _status_with_operator_mode()
 
 
 @router.post("/run")

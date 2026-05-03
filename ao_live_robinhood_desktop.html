@@ -849,7 +849,7 @@
 
     function operatorState(ops, status, rhythm) {
       const moneySystem = ops?.money_system || {};
-      const op = moneySystem.operator_mode || {};
+      const op = moneySystem.operator_mode || status.operator_mode || {};
       const mode = String(op.mode || "");
       const doNotInterrupt = op.do_not_interrupt_user === true;
       const reason = String(op.reason || "");
