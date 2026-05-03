@@ -798,6 +798,26 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
             },
             "recent": recent,
         }
+        try:
+            from app.services.relay_performance import relay_performance_status
+
+            performance = relay_performance_status()
+            active_experiment = performance.get("active_experiment") or {}
+            checks["relay_performance"] = {
+                "active_experiment": {
+                    "experiment_variant": active_experiment.get("experiment_variant"),
+                    "experiment_label": active_experiment.get("experiment_label"),
+                    "source": active_experiment.get("source"),
+                    "week_start_date": active_experiment.get("week_start_date"),
+                },
+                "active_experiment_signal": performance.get("active_experiment_signal") or {},
+                "rolling_7_day": performance.get("rolling_7_day") or {},
+            }
+        except Exception as exc:
+            checks["relay_performance"] = {
+                "status": "error",
+                "summary": str(exc),
+            }
         checks["verdict"] = _ready_label(checks)
         return checks
     finally:

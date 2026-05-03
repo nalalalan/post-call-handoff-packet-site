@@ -249,6 +249,84 @@ def _metrics_for_window(session: Session, *, start: datetime, end: datetime) -> 
     }
 
 
+def _event_variant(event: AcquisitionEvent) -> str:
+    payload = _safe_json(event.payload_json)
+    variant = str(payload.get("experiment_variant") or "").strip()
+    if variant in EXPERIMENTS:
+        return variant
+    return DEFAULT_EXPERIMENT_VARIANT
+
+
+def _variant_metrics_for_window(
+    session: Session,
+    *,
+    variant: str,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Any]:
+    variant = variant if variant in EXPERIMENTS else DEFAULT_EXPERIMENT_VARIANT
+    sent_events = session.execute(
+        select(AcquisitionEvent)
+        .where(AcquisitionEvent.event_type.like("custom_outreach_sent_step_%"))
+        .where(AcquisitionEvent.created_at >= start)
+        .where(AcquisitionEvent.created_at < end)
+        .order_by(AcquisitionEvent.created_at.asc())
+    ).scalars().all()
+    matching_sends = [event for event in sent_events if _event_variant(event) == variant]
+    prospect_ids = {
+        str(event.prospect_external_id or "").strip()
+        for event in matching_sends
+        if str(event.prospect_external_id or "").strip()
+    }
+
+    replies = 0
+    payments = 0
+    if prospect_ids:
+        replies = int(
+            session.execute(
+                select(func.count(AcquisitionEvent.id))
+                .where(AcquisitionEvent.prospect_external_id.in_(prospect_ids))
+                .where(AcquisitionEvent.event_type.in_(["custom_outreach_reply_seen", "smartlead_reply"]))
+                .where(AcquisitionEvent.created_at >= start)
+                .where(AcquisitionEvent.created_at < end)
+            ).scalar()
+            or 0
+        )
+        payments = int(
+            session.execute(
+                select(func.count(AcquisitionProspect.id))
+                .where(AcquisitionProspect.external_id.in_(prospect_ids))
+                .where(AcquisitionProspect.stripe_status == "paid")
+            ).scalar()
+            or 0
+        )
+
+    failed_events = session.execute(
+        select(AcquisitionEvent)
+        .where(AcquisitionEvent.event_type == "custom_outreach_send_failed")
+        .where(AcquisitionEvent.created_at >= start)
+        .where(AcquisitionEvent.created_at < end)
+    ).scalars().all()
+    failures = sum(1 for event in failed_events if _event_variant(event) == variant)
+    sends = len(matching_sends)
+    first_sent = matching_sends[0].created_at.isoformat() if matching_sends else ""
+    last_sent = matching_sends[-1].created_at.isoformat() if matching_sends else ""
+
+    return {
+        "variant": variant,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "sends": sends,
+        "prospect_count": len(prospect_ids),
+        "replies": replies,
+        "reply_rate": round(replies / sends, 4) if sends else 0,
+        "payments": payments,
+        "send_failures": failures,
+        "first_sent_at": first_sent,
+        "last_sent_at": last_sent,
+    }
+
+
 def _research_urls() -> list[str]:
     raw = os.getenv("RELAY_OPTIMIZER_RESEARCH_URLS", "").strip()
     urls = [item.strip() for item in raw.split("|") if item.strip()] if raw else []
@@ -613,10 +691,17 @@ def relay_performance_status() -> dict[str, Any]:
             + _event_count(session, "smartlead_reply")
         )
         latest_plan = _latest_plan_payload(session)
-        current_plan = _current_week_plan_payload(session, week_start)
         latest_review = _event_payload(_latest_event(session, PERFORMANCE_REVIEW_EVENT))
         research = _event_payload(_latest_event(session, RESEARCH_INPUT_EVENT))
         prospect_health = _prospect_health(session)
+        active_plan = active_relay_experiment()
+        active_variant = str(active_plan.get("experiment_variant") or DEFAULT_EXPERIMENT_VARIANT)
+        active_signal = _variant_metrics_for_window(
+            session,
+            variant=active_variant,
+            start=now - timedelta(days=7),
+            end=now,
+        )
 
     return {
         "status": "ok",
@@ -630,7 +715,8 @@ def relay_performance_status() -> dict[str, Any]:
             "reply_rate": round(all_time_replies / all_time_sends, 4) if all_time_sends else 0,
         },
         "prospect_health": prospect_health,
-        "active_experiment": current_plan or latest_plan or active_relay_experiment(),
+        "active_experiment": active_plan,
+        "active_experiment_signal": active_signal,
         "latest_review": latest_review,
         "latest_research_input": research,
         "available_experiments": EXPERIMENTS,

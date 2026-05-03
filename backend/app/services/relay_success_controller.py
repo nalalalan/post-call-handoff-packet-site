@@ -542,24 +542,6 @@ def _next_action(bottleneck: str) -> str:
     return actions.get(bottleneck, actions["running"])
 
 
-def _current_week_key(now: datetime | None = None) -> str:
-    now = now or _now()
-    start = now - timedelta(days=now.weekday())
-    return start.date().isoformat()
-
-
-def _plan_evidence_sends(plan: dict[str, Any]) -> int:
-    sends = 0
-    for key in ["prior_week_metrics", "rolling_7_day_metrics", "current_week_metrics"]:
-        metrics = plan.get(key)
-        if isinstance(metrics, dict):
-            try:
-                sends = max(sends, int(metrics.get("sends") or 0))
-            except Exception:
-                continue
-    return sends
-
-
 def _run_outbound_experiment_review_if_needed(bottleneck: str, snapshot: dict[str, Any]) -> dict[str, Any]:
     if bottleneck != "outbound_targeting_or_copy":
         return {"status": "skipped", "summary": "outbound experiment review not needed for this bottleneck"}
@@ -575,30 +557,46 @@ def _run_outbound_experiment_review_if_needed(bottleneck: str, snapshot: dict[st
 
     performance = relay_performance_status()
     active_plan = performance.get("active_experiment") or {}
+    active_signal = performance.get("active_experiment_signal") or {}
+    active_variant = str(active_plan.get("experiment_variant") or active_signal.get("variant") or "")
     if active_plan.get("source") == "env":
         return {
             "status": "skipped",
             "summary": "outbound variant is pinned by environment",
-            "active_variant": active_plan.get("experiment_variant"),
+            "active_variant": active_variant,
         }
 
-    current_week = _current_week_key()
-    plan_week = str(active_plan.get("week_start_date") or "")
-    plan_sends = _plan_evidence_sends(active_plan)
-    if plan_week == current_week and plan_sends >= min_sample:
+    active_sends = int(active_signal.get("sends") or 0)
+    active_replies = int(active_signal.get("replies") or 0)
+    active_payments = int(active_signal.get("payments") or 0)
+    if active_sends < max(30, min_sample):
         return {
             "status": "skipped",
-            "summary": "current experiment plan already used measurable evidence",
-            "active_variant": active_plan.get("experiment_variant"),
-            "evidence_sends": plan_sends,
+            "summary": "active experiment still needs its own measurable send sample",
+            "active_variant": active_variant,
+            "active_experiment_sends": active_sends,
+            "active_experiment_replies": active_replies,
+            "aggregate_sends": sends,
+        }
+    if active_replies > 0 or active_payments > 0:
+        return {
+            "status": "skipped",
+            "summary": "active experiment has signal; keep collecting evidence",
+            "active_variant": active_variant,
+            "active_experiment_sends": active_sends,
+            "active_experiment_replies": active_replies,
+            "active_experiment_payments": active_payments,
         }
 
     review = run_weekly_performance_review(force=True, fetch_research=False)
     plan = review.get("plan") or {}
     return {
         "status": review.get("status", "ok"),
-        "summary": "created bottleneck-driven outbound experiment review",
+        "summary": "created active-experiment failure review",
         "created": bool(review.get("created")),
+        "previous_experiment_variant": active_variant,
+        "previous_experiment_sends": active_sends,
+        "previous_experiment_replies": active_replies,
         "experiment_variant": plan.get("experiment_variant"),
         "experiment_label": plan.get("experiment_label"),
         "decision_reasons": plan.get("decision_reasons", []),
