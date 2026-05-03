@@ -2362,6 +2362,7 @@ def _ao_digest_operator_mode(
         "outbound_send_failed",
         "outbound_send_stalled",
         "outbound_window_missed",
+        "outbound_window_underfilled",
     }
     followup = {"messy_notes_to_payment", "sample_to_notes"}
 
@@ -2457,6 +2458,7 @@ def _ao_digest_launch_readiness(
         "outbound_send_failed",
         "outbound_send_stalled",
         "outbound_window_missed",
+        "outbound_window_underfilled",
     }
     bottleneck = str(success_status.get("bottleneck") or "").strip()
     if bottleneck in execution_blocker_states:

@@ -143,6 +143,7 @@ def _operator_mode(
         "outbound_send_failed",
         "outbound_send_stalled",
         "outbound_window_missed",
+        "outbound_window_underfilled",
     }
     followup_states = {
         "messy_notes_to_payment",
@@ -223,6 +224,7 @@ def _launch_readiness_contract(
         "outbound_send_failed",
         "outbound_send_stalled",
         "outbound_window_missed",
+        "outbound_window_underfilled",
     }
     if money_state in execution_blocker_states:
         blockers.append(money_next_action or money_state)
