@@ -464,7 +464,8 @@ def _run_intake_smoke_check_if_needed() -> dict[str, Any]:
         ).scalar_one_or_none()
         if latest is not None and latest.created_at is not None:
             age_seconds = max(int((now - latest.created_at.replace(tzinfo=None)).total_seconds()), 0)
-            if age_seconds < interval_hours * 3600:
+            latest_payload = _safe_json(latest.payload_json)
+            if latest_payload.get("status") != "error" and age_seconds < interval_hours * 3600:
                 return {
                     "status": "skipped",
                     "summary": "recent_intake_smoke_check_exists",
@@ -523,7 +524,8 @@ def _run_delivery_smoke_check_if_needed() -> dict[str, Any]:
         ).scalar_one_or_none()
         if latest is not None and latest.created_at is not None:
             age_seconds = max(int((now - latest.created_at.replace(tzinfo=None)).total_seconds()), 0)
-            if age_seconds < interval_hours * 3600:
+            latest_payload = _safe_json(latest.payload_json)
+            if latest_payload.get("status") != "error" and age_seconds < interval_hours * 3600:
                 return {
                     "status": "skipped",
                     "summary": "recent_delivery_smoke_check_exists",
@@ -535,7 +537,7 @@ def _run_delivery_smoke_check_if_needed() -> dict[str, Any]:
         env = _env_snapshot()
         missing = [
             name
-            for name in ["OPENAI_API_KEY", "RESEND_API_KEY", "FROM_EMAIL_FULFILLMENT"]
+            for name in ["RESEND_API_KEY", "FROM_EMAIL_FULFILLMENT"]
             if not env.get(name)
         ]
         detail: dict[str, Any] = {
@@ -547,15 +549,18 @@ def _run_delivery_smoke_check_if_needed() -> dict[str, Any]:
         try:
             from app.workers import fulfillment
 
+            master_status = fulfillment.ensure_master_workbook()
             master_path = fulfillment.MASTER_PATH
             generate_script = fulfillment.GENERATE_SCRIPT
             detail["master_path"] = str(master_path)
             detail["generate_script"] = str(generate_script)
+            detail["master_workbook_status"] = master_status
             detail["master_path_exists"] = master_path.exists()
             detail["generate_script_exists"] = generate_script.exists()
+            detail["builtin_generator_available"] = hasattr(fulfillment, "_run_builtin_generator")
             if not master_path.exists():
                 missing.append("FULFILLMENT_MASTER_WORKBOOK")
-            if not generate_script.exists():
+            if not generate_script.exists() and not hasattr(fulfillment, "_run_builtin_generator"):
                 missing.append("FULFILLMENT_GENERATE_SCRIPT")
             if master_path.exists():
                 wb = fulfillment.load_workbook(master_path, read_only=True)

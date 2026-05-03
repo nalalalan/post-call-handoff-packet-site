@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from app.core.config import settings
 from app.integrations.resend_client import ResendClient
@@ -83,6 +83,53 @@ def _header_map(ws) -> dict[str, int]:
     return out
 
 
+def ensure_master_workbook() -> dict[str, Any]:
+    MASTER_PATH.parent.mkdir(parents=True, exist_ok=True)
+    created = False
+    changed = False
+
+    if not MASTER_PATH.exists():
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Master Log"
+        ws.append(MASTER_HEADERS)
+        wb.save(MASTER_PATH)
+        wb.close()
+        created = True
+
+    wb = load_workbook(MASTER_PATH)
+    try:
+        if "Master Log" not in wb.sheetnames:
+            ws = wb.create_sheet("Master Log")
+            ws.append(MASTER_HEADERS)
+            changed = True
+        else:
+            ws = wb["Master Log"]
+
+        headers = _header_map(ws)
+        if not headers:
+            ws.append(MASTER_HEADERS)
+            headers = _header_map(ws)
+            changed = True
+
+        for header in MASTER_HEADERS:
+            if header not in headers:
+                ws.cell(1, ws.max_column + 1).value = header
+                changed = True
+
+        if changed:
+            wb.save(MASTER_PATH)
+    finally:
+        wb.close()
+
+    return {
+        "status": "ok",
+        "created": created,
+        "changed": changed,
+        "master_path": str(MASTER_PATH),
+    }
+
+
 def _load_module(path: Path, module_name: str):
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
@@ -138,8 +185,7 @@ def _guardrail_email(fields: dict[str, str], gate: ClientGateResult) -> tuple[st
 
 
 def _find_or_create_row(payload: dict[str, Any]) -> str:
-    if not MASTER_PATH.exists():
-        raise RuntimeError(f"Master workbook not found: {MASTER_PATH}")
+    ensure_master_workbook()
 
     data = payload.get("data") or {}
     fields = _field_map(payload)
@@ -190,15 +236,101 @@ def run_importer(payload: dict[str, Any]) -> str:
     return _find_or_create_row(payload)
 
 
-def run_generator() -> dict[str, int | str]:
-    if settings.openai_api_key:
-        os.environ["OPENAI_API_KEY"] = settings.openai_api_key
-    elif not os.getenv("OPENAI_API_KEY", "").strip():
-        raise RuntimeError("OPENAI_API_KEY is missing")
+def _builtin_packet(row_data: dict[str, str]) -> str:
+    client_name = row_data.get("client_name") or "your client"
+    focus = row_data.get("focus") or "next steps and follow-up"
+    tone = row_data.get("tone") or "clear, calm, and direct"
+    raw_notes = row_data.get("raw_notes") or ""
+    notes_preview = "\n".join(line.strip() for line in raw_notes.splitlines() if line.strip())[:2500]
+    return clean_packet_text(
+        f"""
+Post-Call Handoff Packet - {client_name}
 
-    module = _load_module(GENERATE_SCRIPT, "legacy_generate_packets")
-    model = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
-    generated_count, failed_count = module.process_workbook(MASTER_PATH, model)
+Focus
+{focus}
+
+Tone
+{tone}
+
+Executive recap
+The call notes point to a follow-through need around {focus}. The immediate priority is to turn the messy notes into a clear handoff: what was discussed, what matters, what remains open, and what should happen next.
+
+Next steps
+1. Confirm the main outcome from the call.
+2. Send the follow-up note below while the conversation is still warm.
+3. Move the open questions into the next client touchpoint.
+4. Put the CRM-ready update into the account record.
+
+Follow-up draft
+Hi,
+
+Thanks for the conversation. Based on the call, the main priority is {focus}. The next move is to confirm the open items, align on ownership, and keep momentum without adding extra back-and-forth.
+
+Here are the next steps I have captured:
+- Confirm the desired outcome.
+- Resolve the open questions.
+- Decide who owns the next action.
+- Set the next check-in or delivery point.
+
+If I missed anything important, send it over and I will update the handoff.
+
+CRM-ready update
+Call completed. Focus: {focus}. Follow-up needed. Open items and next actions should be confirmed with the client before the next delivery step.
+
+Source notes
+{notes_preview}
+""".strip()
+    )
+
+
+def _run_builtin_generator() -> tuple[int, int]:
+    ensure_master_workbook()
+    wb = load_workbook(MASTER_PATH)
+    generated_count = 0
+    failed_count = 0
+    try:
+        ws = wb["Master Log"]
+        headers = _header_map(ws)
+        for row in range(2, ws.max_row + 1):
+            status = _stringify(ws.cell(row, headers["status"]).value).lower()
+            if status not in {"", "new", "imported"}:
+                continue
+
+            row_data = {
+                header: _stringify(ws.cell(row, col).value)
+                for header, col in headers.items()
+            }
+            if not row_data.get("raw_notes"):
+                ws.cell(row, headers["status"]).value = "error"
+                ws.cell(row, headers["error_notes"]).value = "missing raw_notes"
+                failed_count += 1
+                continue
+
+            ws.cell(row, headers["generated_packet"]).value = _builtin_packet(row_data)
+            ws.cell(row, headers["status"]).value = "generated"
+            ws.cell(row, headers["error_notes"]).value = ""
+            generated_count += 1
+
+        wb.save(MASTER_PATH)
+    finally:
+        wb.close()
+
+    return generated_count, failed_count
+
+
+def run_generator() -> dict[str, int | str]:
+    if GENERATE_SCRIPT.exists():
+        if settings.openai_api_key:
+            os.environ["OPENAI_API_KEY"] = settings.openai_api_key
+        elif not os.getenv("OPENAI_API_KEY", "").strip():
+            raise RuntimeError("OPENAI_API_KEY is missing")
+
+        module = _load_module(GENERATE_SCRIPT, "legacy_generate_packets")
+        model = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
+        generated_count, failed_count = module.process_workbook(MASTER_PATH, model)
+    else:
+        model = "builtin_fallback"
+        generated_count, failed_count = _run_builtin_generator()
     result = {
         "generated_count": generated_count,
         "failed_count": failed_count,
