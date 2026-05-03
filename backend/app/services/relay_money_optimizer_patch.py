@@ -481,6 +481,24 @@ def _experiment_sample_target() -> int:
         return 20
 
 
+def _effective_daily_cap(experiment: dict[str, Any] | None = None) -> int:
+    configured_cap = max(int(settings.buyer_acq_daily_send_cap or 0), 1)
+    try:
+        experiment_cap = int((experiment or {}).get("daily_cap_recommendation") or configured_cap)
+    except Exception:
+        experiment_cap = configured_cap
+    return max(min(experiment_cap, configured_cap), 1)
+
+
+def _send_window_wait_text(status: dict[str, Any]) -> str:
+    next_open = str(status.get("send_window_next_open_local") or "").strip()
+    if not next_open:
+        return "wait for the send window"
+    if str(status.get("send_window_reason") or "").strip() == "weekend":
+        return f"next business-day send window opens {next_open}"
+    return f"next send window opens {next_open}"
+
+
 def _event_variant(event: AcquisitionEvent) -> str:
     payload = _safe_json(getattr(event, "payload_json", None))
     return str(payload.get("experiment_variant") or "control_sample_ask").strip() or "control_sample_ask"
@@ -592,7 +610,7 @@ def _quality_snapshot(session) -> dict[str, Any]:
         sendable_due = direct_due
         paused_generic = generic_due
 
-    daily_cap = int(settings.buyer_acq_daily_send_cap or 0)
+    daily_cap = _effective_daily_cap(_active_experiment())
     sent_today = int(outreach._daily_send_count(session) or 0)
 
     return {
@@ -606,6 +624,7 @@ def _quality_snapshot(session) -> dict[str, Any]:
         "sendable_due_count": sendable_due,
         "generic_paused_count": paused_generic,
         "cap_remaining": max(daily_cap - sent_today, 0),
+        "effective_daily_cap": daily_cap,
         "zero_reply_strict_mode": strict_mode,
         "total_sends_all_time": total_sends_all_time,
         "total_replies_all_time": total_replies_all_time,
@@ -632,7 +651,7 @@ def _next_money_move(status: dict[str, Any]) -> str:
         if active_due > 0:
             if status.get("send_window_is_open"):
                 return f"Build {variant} sample now: send fresh first-touch leads before old follow-ups."
-            return f"{variant} needs sample {active_sends}/{target}; wait for the send window."
+            return f"{variant} needs sample {active_sends}/{target}; {_send_window_wait_text(status)}."
         direct_due = int(status.get("direct_due_count") or 0)
         if direct_due > 0 and int(status.get("cap_remaining") or 0) > 0:
             if status.get("send_window_is_open"):
@@ -642,7 +661,7 @@ def _next_money_move(status: dict[str, Any]) -> str:
                 )
             return (
                 f"{variant} needs sample {active_sends}/{target}, but no fresh first-touch leads are ready. "
-                "Direct follow-ups are ready; wait for the send window while refilling fresh named buyers."
+                f"Direct follow-ups are ready; {_send_window_wait_text(status)} while refilling fresh named buyers."
             )
         return f"Refill fresh direct buyer leads for {variant}; old follow-ups do not count toward the new experiment."
     if int(status.get("sent_today") or 0) >= int(status.get("daily_send_cap") or 0) and int(status.get("replies_today") or 0) == 0:
@@ -663,7 +682,7 @@ def _next_money_move(status: dict[str, Any]) -> str:
     if int(status.get("direct_due_count") or 0) > 0 and int(status.get("cap_remaining") or 0) > 0:
         if status.get("send_window_is_open"):
             return "Send direct decision-maker leads now; keep generic inboxes paused."
-        return "Direct decision-maker leads are ready; wait for the send window."
+        return f"Direct decision-maker leads are ready; {_send_window_wait_text(status)}."
     if int(status.get("generic_paused_count") or 0) > 0:
         return "Generic inboxes are paused; refill with Apollo people leads."
     return "Refill direct decision-maker leads before increasing volume."
@@ -753,12 +772,13 @@ def optimized_outreach_status() -> dict[str, Any]:
 def optimized_send_due_sequence_messages(limit: int | None = None) -> dict[str, Any]:
     import app.services.custom_outreach as outreach
 
-    limit = limit or settings.buyer_acq_daily_send_cap
+    active_experiment = _active_experiment()
+    active_variant = str(active_experiment.get("experiment_variant") or "control_sample_ask")
+    effective_daily_cap = _effective_daily_cap(active_experiment)
+    limit = min(limit or effective_daily_cap, effective_daily_cap)
     sent = 0
     skipped = 0
     failures: list[dict[str, Any]] = []
-    active_experiment = _active_experiment()
-    active_variant = str(active_experiment.get("experiment_variant") or "control_sample_ask")
 
     window = outreach._send_window_status()
     if not window["is_open"]:
@@ -769,6 +789,8 @@ def optimized_send_due_sequence_messages(limit: int | None = None) -> dict[str, 
             "skipped_count": 0,
             "failures": [],
             "send_window": window,
+            "effective_daily_cap": effective_daily_cap,
+            "active_experiment_variant": active_variant,
         }
 
     with SessionLocal() as session:
@@ -894,7 +916,7 @@ def optimized_send_due_sequence_messages(limit: int | None = None) -> dict[str, 
             reserved_ids = {id(candidate[0]) for candidate in reserved}
             candidates = reserved + [candidate for candidate in candidates if id(candidate[0]) not in reserved_ids]
 
-        remaining_cap = max(settings.buyer_acq_daily_send_cap - outreach._daily_send_count(session), 0)
+        remaining_cap = max(effective_daily_cap - outreach._daily_send_count(session), 0)
 
         for prospect, step, candidate_variant, is_active_experiment_new in candidates:
             if sent >= limit or remaining_cap <= 0:
@@ -961,6 +983,7 @@ def optimized_send_due_sequence_messages(limit: int | None = None) -> dict[str, 
         "skipped_count": skipped + paused_generic,
         "failures": failures,
         "active_experiment": active_experiment,
+        "effective_daily_cap": effective_daily_cap,
         "quality_gate": {
             "policy": policy,
             "direct_due_count": len(direct_due),
