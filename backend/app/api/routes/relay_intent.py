@@ -1134,6 +1134,8 @@ def _compact_money_loop_payload(payload: dict[str, Any] | None) -> dict[str, Any
         "active_sample_sends_before": payload.get("active_sample_sends_before"),
         "active_sample_sends_after": payload.get("active_sample_sends_after"),
         "active_sample_delta_this_tick": payload.get("active_sample_delta_this_tick"),
+        "active_sample_expected_delta_this_tick": payload.get("active_sample_expected_delta_this_tick"),
+        "active_sample_tick_proof_state": payload.get("active_sample_tick_proof_state"),
         "active_sample_target": payload.get("active_sample_target"),
         "active_sample_progress_after": payload.get("active_sample_progress_after"),
         "active_experiment_new_due_before": payload.get("active_experiment_new_due_before"),

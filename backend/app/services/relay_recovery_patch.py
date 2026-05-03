@@ -456,6 +456,31 @@ def _outreach_sent_count(result: Any) -> int:
     return max(sent, 0)
 
 
+def _active_sample_expected_delta(status: dict[str, Any]) -> int:
+    if not bool(status.get("send_window_is_open")):
+        return 0
+    if not bool(status.get("active_experiment_needs_sample")):
+        return 0
+    active_sends = int(status.get("active_experiment_sends") or 0)
+    active_target = int(status.get("active_experiment_sample_target") or 0)
+    active_remaining = max(active_target - active_sends, 0) if active_target > 0 else 0
+    sendable_due, _ = _sendable_due_for_current_goal(status)
+    cap_remaining = int(status.get("cap_remaining") or 0)
+    if active_remaining <= 0 or sendable_due <= 0 or cap_remaining <= 0:
+        return 0
+    return min(active_remaining, sendable_due, cap_remaining)
+
+
+def _active_sample_tick_proof_state(expected_delta: int, actual_delta: int) -> str:
+    if expected_delta <= 0:
+        return "not_expected"
+    if actual_delta >= expected_delta:
+        return "met"
+    if actual_delta > 0:
+        return "partial"
+    return "missed"
+
+
 def _success_control_requires_status_refresh(result: Any) -> tuple[bool, str]:
     if not isinstance(result, dict):
         return False, ""
@@ -610,7 +635,8 @@ def _log_money_loop_tick(result: dict[str, Any]) -> None:
             f"success={_status_label(result.get('success_control'))} "
             f"success_after={_status_label(result.get('success_control_after_outreach'))} "
             f"sent_this_tick={int(result.get('sent_this_tick') or 0)} "
-            f"active_delta={int(result.get('active_sample_delta_this_tick') or 0)}"
+            f"active_delta={int(result.get('active_sample_delta_this_tick') or 0)} "
+            f"active_expected_delta={int(result.get('active_sample_expected_delta_this_tick') or 0)}"
         )
         with SessionLocal() as session:
             session.add(
@@ -1271,6 +1297,7 @@ async def _relay_money_loop_tick(
         cap_remaining = int(status.get("cap_remaining") or 0)
         send_window_open = bool(status.get("send_window_is_open"))
 
+    active_sample_expected_delta_this_tick = _active_sample_expected_delta(status)
     outreach_phase = "after_refill"
     send_first = send_live and send_window_open and sendable_due > 0 and cap_remaining > 0
     if send_first:
@@ -1488,6 +1515,7 @@ async def _relay_money_loop_tick(
                 and post_refill_sendable_due > 0
                 and int(status_after_refill.get("cap_remaining") or 0) > 0
             ):
+                active_sample_expected_delta_this_tick += _active_sample_expected_delta(status_after_refill)
                 post_refill_outreach_result = _compact_outreach_result(
                     await asyncio.to_thread(outreach.run_custom_outreach_cycle)
                 )
@@ -1517,6 +1545,10 @@ async def _relay_money_loop_tick(
         final_status_after.get("active_experiment_sample_target") or active_sample_target_before or 0
     )
     active_sample_delta_this_tick = max(active_sample_sends_after - active_sample_sends_before, 0)
+    active_sample_tick_proof_state = _active_sample_tick_proof_state(
+        active_sample_expected_delta_this_tick,
+        active_sample_delta_this_tick,
+    )
     result = {
         "refill_result": refill_result,
         "outreach_result": outreach_result,
@@ -1529,6 +1561,8 @@ async def _relay_money_loop_tick(
         "active_sample_sends_before": active_sample_sends_before,
         "active_sample_sends_after": active_sample_sends_after,
         "active_sample_delta_this_tick": active_sample_delta_this_tick,
+        "active_sample_expected_delta_this_tick": active_sample_expected_delta_this_tick,
+        "active_sample_tick_proof_state": active_sample_tick_proof_state,
         "active_sample_target": active_sample_target_after,
         "active_sample_progress_after": (
             f"{active_sample_sends_after}/{active_sample_target_after}" if active_sample_target_after else ""
@@ -1684,6 +1718,10 @@ def _money_loop_sleep_seconds(result: dict[str, Any] | None, default_interval: i
             return max(min(seconds_until_open + 5, default_interval), 5), "align_with_send_window"
         if seconds_until_open <= 3600:
             return min(default_interval, 300), "pre_send_window_ready"
+
+    proof_state = str((result or {}).get("active_sample_tick_proof_state") or "").strip()
+    if proof_state in {"missed", "partial"}:
+        return min(default_interval, 120), "active_sample_tick_shortfall_watch"
 
     try:
         active_sample_delta = int((result or {}).get("active_sample_delta_this_tick") or 0)
