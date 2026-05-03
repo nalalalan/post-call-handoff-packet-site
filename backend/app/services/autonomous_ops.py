@@ -2309,6 +2309,113 @@ def _ao_digest_total_replies(outreach_digest: dict[str, Any]) -> int:
     return _ao_digest_event_count(["custom_outreach_reply_seen", "smartlead_reply"])
 
 
+def _ao_digest_success_status() -> dict[str, Any]:
+    try:
+        status = relay_success_status()
+        return status if isinstance(status, dict) else {"status": "error", "error": "empty_success_status"}
+    except Exception as error:
+        return {"status": "error", "error": str(error)}
+
+
+def _ao_digest_nested(mapping: dict[str, Any], key: str) -> dict[str, Any]:
+    value = mapping.get(key) if isinstance(mapping, dict) else {}
+    return value if isinstance(value, dict) else {}
+
+
+def _ao_digest_operator_mode(
+    summary: dict[str, Any],
+    outreach_digest: dict[str, Any],
+    success_status: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    success_status = success_status if isinstance(success_status, dict) else {}
+    snapshot = _ao_digest_nested(success_status, "snapshot")
+    money = _ao_digest_nested(snapshot, "money")
+    intent = _ao_digest_nested(snapshot, "intent")
+    outreach = _ao_digest_nested(snapshot, "outreach")
+
+    bottleneck = str(success_status.get("bottleneck") or "").strip()
+    payments = _ao_digest_int(money.get("payments") or summary.get("week", {}).get("payments_count"))
+    replies = _ao_digest_int(outreach.get("replies") or outreach_digest.get("total_replies_all_time") or outreach_digest.get("replies_today"))
+    checkout_clicks = _ao_digest_int(intent.get("checkout_clicks"))
+    due = _ao_digest_int(outreach.get("due_now") or outreach_digest.get("direct_due_count") or outreach_digest.get("due_now_count"))
+    cap_remaining = _ao_digest_int(outreach.get("cap_remaining") or outreach_digest.get("cap_remaining"))
+    send_window_open = bool(outreach.get("send_window_is_open") or outreach_digest.get("send_window_is_open"))
+    active_needs_sample = bool(
+        outreach.get("active_experiment_needs_sample")
+        or outreach_digest.get("active_experiment_needs_sample")
+    )
+    active_due = _ao_digest_int(
+        outreach.get("active_experiment_new_due_count")
+        or outreach_digest.get("active_experiment_new_due_count")
+    )
+    next_window = str(
+        outreach.get("send_window_next_open_local")
+        or outreach_digest.get("send_window_next_open_local")
+        or ""
+    ).strip()
+
+    urgent = {
+        "infrastructure_blocked",
+        "paid_fulfillment",
+        "checkout_to_payment",
+        "reply_to_payment",
+        "outbound_send_failed",
+        "outbound_send_stalled",
+    }
+    followup = {"messy_notes_to_payment", "sample_to_notes"}
+
+    if bottleneck in urgent or replies > payments or checkout_clicks > payments:
+        return {
+            "mode": "attention_required",
+            "label": "Attention needed",
+            "do_not_interrupt_user": False,
+            "reason": success_status.get("next_action") or bottleneck or "buyer signal needs handling",
+            "next_window": next_window,
+        }
+    if bottleneck in followup:
+        return {
+            "mode": "autonomous_followup_due",
+            "label": "Stay out",
+            "do_not_interrupt_user": True,
+            "reason": success_status.get("next_action") or "Relay has a follow-up queued.",
+            "next_window": next_window,
+        }
+
+    ready_due = active_due if active_needs_sample else due
+    if ready_due > 0 and cap_remaining > 0:
+        if send_window_open:
+            return {
+                "mode": "autonomous_sending_now",
+                "label": "Stay out",
+                "do_not_interrupt_user": True,
+                "reason": "Send window is open and Relay has queued leads.",
+                "next_window": next_window,
+            }
+        return {
+            "mode": "out_of_loop_waiting",
+            "label": "Stay out",
+            "do_not_interrupt_user": True,
+            "reason": "Queued leads are ready for the next send window.",
+            "next_window": next_window,
+        }
+
+    return {
+        "mode": "out_of_loop_monitoring",
+        "label": "Stay out",
+        "do_not_interrupt_user": True,
+        "reason": success_status.get("next_action") or "No immediate human action is useful.",
+        "next_window": next_window,
+    }
+
+
+def _ao_digest_operator_note(operator: dict[str, Any]) -> str:
+    reason = str(operator.get("reason") or "").strip()
+    next_window = str(operator.get("next_window") or "").strip()
+    if next_window and operator.get("do_not_interrupt_user"):
+        return f"{reason} Next window: {next_window}"
+    return reason
+
+
 def _ao_digest_fetch_json(url: str, timeout_seconds: int = 8) -> dict[str, Any]:
     request = _ao_digest_urlrequest.Request(
         url,
@@ -2486,15 +2593,20 @@ def _ao_digest_ocean_items_html(ocean_digest: dict[str, Any]) -> str:
     return "".join(rows) or '<div style="font-size:13px;color:#64748b;">No Ocean items available today.</div>'
 
 
-def _daily_update_subject(summary: dict[str, Any], outreach_digest: dict[str, Any]) -> str:
+def _daily_update_subject(
+    summary: dict[str, Any],
+    outreach_digest: dict[str, Any],
+    success_status: dict[str, Any] | None = None,
+) -> str:
     today = summary.get("today", {})
     money_today = _ao_digest_money(today.get("gross_usd", 0))
     sent_today = _ao_digest_int(outreach_digest.get("sent_today"))
     replies_today = _ao_digest_int(outreach_digest.get("replies_today"))
     total_sent = _ao_digest_total_sends(outreach_digest)
     total_replies = _ao_digest_total_replies(outreach_digest)
+    operator = _ao_digest_operator_mode(summary, outreach_digest, success_status)
     return _ascii_safe(
-        f"[AO Digest] Relay {money_today} | sent {sent_today}/{total_sent} | replies {replies_today}/{total_replies}"
+        f"[AO Digest] {operator['label']} | Relay {money_today} | sent {sent_today}/{total_sent} | replies {replies_today}/{total_replies}"
     )
 
 
@@ -2503,6 +2615,7 @@ def _daily_update_html(
     outreach_digest: dict[str, Any],
     seed_result: dict[str, Any],
     ocean_digest: dict[str, Any] | None = None,
+    success_status: dict[str, Any] | None = None,
 ) -> str:
     ocean_digest = ocean_digest or _ao_digest_ocean_digest()
     today = summary.get("today", {})
@@ -2516,19 +2629,23 @@ def _daily_update_html(
     ocean_url = _ao_digest_ocean_url()
     relay_state = _ao_digest_relay_state(summary, outreach_digest)
     relay_move = _ao_digest_relay_move(summary, outreach_digest)
+    operator = _ao_digest_operator_mode(summary, outreach_digest, success_status)
+    operator_note = _ao_digest_operator_note(operator)
 
     return f"""
 <div style="margin:0;padding:12px;background:#f6f7f9;">
   <div style="max-width:720px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#101827;line-height:1.5;">
     <div style="background:#ffffff;border:1px solid #d8dee8;border-radius:18px;padding:18px 16px;margin-bottom:12px;">
       <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#2458d3;font-weight:900;">AO Digest</div>
-      <div style="font-size:30px;line-height:1.05;font-weight:900;letter-spacing:-0.03em;margin:6px 0;">{escape(relay_state)}</div>
-      <div style="font-size:14px;color:#475569;">Daily status for Relay money, Ocean learning, and staying steady under pressure.</div>
+      <div style="font-size:30px;line-height:1.05;font-weight:900;letter-spacing:-0.03em;margin:6px 0;">{escape(operator["label"])}</div>
+      <div style="font-size:14px;color:#475569;">{escape(operator_note)}</div>
     </div>
 
     <div style="background:#ffffff;border:1px solid #d8dee8;border-radius:18px;padding:16px;margin-bottom:12px;">
       <div style="font-size:18px;font-weight:900;margin-bottom:10px;">Relay</div>
       <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
+        {_ao_digest_metric_html("Operator", str(operator["label"]), "interrupt only for replies, payments, or health failures")}
+        {_ao_digest_metric_html("State", relay_state, str(operator.get("mode") or ""))}
         {_ao_digest_metric_html("Money today", _ao_digest_money(today.get("gross_usd")), f"{today.get('payments_count', 0)} payments")}
         {_ao_digest_metric_html("Money week", _ao_digest_money(week.get("gross_usd")), f"month {_ao_digest_money(month.get('gross_usd'))}")}
         {_ao_digest_metric_html("Emails sent", str(total_sent), f"today {outreach_digest.get('sent_today', 0)} / cap {outreach_digest.get('daily_send_cap', 0)}")}
@@ -2573,6 +2690,7 @@ def _daily_update_text(
     outreach_digest: dict[str, Any],
     seed_result: dict[str, Any],
     ocean_digest: dict[str, Any] | None = None,
+    success_status: dict[str, Any] | None = None,
 ) -> str:
     ocean_digest = ocean_digest or _ao_digest_ocean_digest()
     today = summary.get("today", {})
@@ -2583,11 +2701,13 @@ def _daily_update_text(
     total_sent = _ao_digest_total_sends(outreach_digest)
     total_replies = _ao_digest_total_replies(outreach_digest)
     items = ocean_digest.get("items") if isinstance(ocean_digest.get("items"), list) else []
+    operator = _ao_digest_operator_mode(summary, outreach_digest, success_status)
 
     lines = [
         "AO Digest",
         "",
         "Relay",
+        _ascii_safe(f"- operator: {operator['label']} ({_ao_digest_operator_note(operator)})"),
         f"- state: {_ao_digest_relay_state(summary, outreach_digest)}",
         _ascii_safe(f"- money today: {_ao_digest_money(today.get('gross_usd'))} from {today.get('payments_count', 0)} payments"),
         _ascii_safe(f"- money week: {_ao_digest_money(week.get('gross_usd'))} | month: {_ao_digest_money(month.get('gross_usd'))}"),
@@ -2632,11 +2752,12 @@ def send_daily_money_summary() -> dict[str, Any]:
     summary = money_summary()
     outreach_digest = outreach_status()
     ocean_digest = _ao_digest_ocean_digest()
+    success_status = _ao_digest_success_status()
     seed_result = {"status": "skipped", "reason": "ao_digest_replaces_seed_check"}
 
-    update_subject = _daily_update_subject(summary, outreach_digest)
-    update_html = _daily_update_html(summary, outreach_digest, seed_result, ocean_digest)
-    update_text = _daily_update_text(summary, outreach_digest, seed_result, ocean_digest)
+    update_subject = _daily_update_subject(summary, outreach_digest, success_status)
+    update_html = _daily_update_html(summary, outreach_digest, seed_result, ocean_digest, success_status)
+    update_text = _daily_update_text(summary, outreach_digest, seed_result, ocean_digest, success_status)
     update_send_result = _send_smtp_email_from_seed_sender(
         subject=update_subject,
         text_body=update_text,
@@ -2655,6 +2776,8 @@ def send_daily_money_summary() -> dict[str, Any]:
                         "money": summary,
                         "outreach_digest": outreach_digest,
                         "ocean_digest": ocean_digest,
+                        "relay_success": success_status,
+                        "operator_mode": _ao_digest_operator_mode(summary, outreach_digest, success_status),
                         "seed_result": seed_result,
                         "update_send_result": update_send_result,
                     },
@@ -2673,6 +2796,8 @@ def send_daily_money_summary() -> dict[str, Any]:
         "summary": summary,
         "outreach_digest": outreach_digest,
         "ocean_digest": ocean_digest,
+        "relay_success": success_status,
+        "operator_mode": _ao_digest_operator_mode(summary, outreach_digest, success_status),
     }
 
 # --- AO DIGEST OVERRIDE END ---
