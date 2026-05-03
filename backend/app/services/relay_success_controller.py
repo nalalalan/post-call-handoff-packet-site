@@ -31,6 +31,7 @@ DELIVERY_SMOKE_EVENT = "relay_delivery_smoke_test"
 OUTBOUND_SMOKE_EVENT = "relay_outbound_smoke_test"
 PUBLIC_OFFER_SMOKE_EVENT = "relay_public_offer_smoke_test"
 REPLY_AUTOCLOSE_SMOKE_EVENT = "relay_reply_autoclose_smoke_test"
+PAYMENT_WEBHOOK_SMOKE_EVENT = "relay_payment_webhook_smoke_test"
 EXPERIMENT_PLAN_EVENT = "relay_experiment_plan"
 DEFAULT_EXPERIMENT_VARIANT = "control_sample_ask"
 HARD_PAID_TEST_VARIANT = "hard_paid_test_direct"
@@ -680,6 +681,10 @@ def _reply_autoclose_smoke_interval_hours() -> int:
     return max(_int_env("RELAY_REPLY_AUTOCLOSE_SMOKE_INTERVAL_HOURS", 6), 1)
 
 
+def _payment_webhook_smoke_interval_hours() -> int:
+    return max(_int_env("RELAY_PAYMENT_WEBHOOK_SMOKE_INTERVAL_HOURS", 6), 1)
+
+
 def _run_intake_smoke_check_if_needed() -> dict[str, Any]:
     now = _now()
     interval_hours = _intake_smoke_interval_hours()
@@ -1144,6 +1149,157 @@ def _run_reply_autoclose_smoke_check_if_needed() -> dict[str, Any]:
         }
 
 
+def _payment_webhook_preflight() -> dict[str, Any]:
+    now = _now()
+    missing: list[str] = []
+    detail: dict[str, Any] = {
+        "route": "/webhooks/stripe",
+        "did_not_call_webhook_handler": True,
+        "did_not_create_payment": True,
+        "did_not_send_customer_email": True,
+        "checked_at": now.isoformat(),
+    }
+    try:
+        from app.services import acquisition_supervisor, post_purchase_autopilot
+        from app.services.stripe_webhook_security import (
+            build_stripe_signature_header,
+            verify_stripe_signature_header,
+        )
+
+        sample_payload = {
+            "id": "evt_relay_payment_preflight",
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "id": "cs_relay_payment_preflight",
+                    "amount_total": 4000,
+                    "currency": "usd",
+                    "customer_details": {"email": "buyer@example.com"},
+                    "customer_email": "buyer@example.com",
+                }
+            },
+        }
+        raw_body = json.dumps(sample_payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        obj = sample_payload["data"]["object"]
+        email = str(obj.get("customer_details", {}).get("email") or obj.get("customer_email") or "").strip().lower()
+        amount_total = _safe_int(obj.get("amount_total"))
+        currency = str(obj.get("currency") or "").strip().lower()
+        intake_url = (
+            settings.client_intake_destination
+            or os.getenv("CLIENT_INTAKE_URL", "").strip()
+            or (settings.landing_page_url.rstrip("/") + "/#send-notes" if settings.landing_page_url else "")
+        )
+        env = _env_snapshot()
+        handler_available = callable(getattr(acquisition_supervisor, "handle_stripe_purchase_webhook", None))
+        onboarding_available = callable(getattr(post_purchase_autopilot, "send_paid_onboarding_for_email", None))
+
+        detail.update(
+            {
+                "event_type": sample_payload["type"],
+                "sample_session_id": obj["id"],
+                "sample_amount_total": amount_total,
+                "sample_currency": currency,
+                "sample_email_present": bool(email),
+                "webhook_secret_configured": bool(settings.stripe_webhook_secret),
+                "checkout_configured": bool(settings.packet_checkout_url),
+                "resend_configured": bool(env.get("RESEND_API_KEY")),
+                "from_email_configured": bool(env.get("FROM_EMAIL_FULFILLMENT")),
+                "reply_to_configured": bool(settings.reply_to_email),
+                "intake_url_configured": bool(intake_url),
+                "handler_available": handler_available,
+                "paid_onboarding_available": onboarding_available,
+                "would_record_stripe_paid": bool(email and amount_total > 0 and currency),
+                "would_start_paid_onboarding": bool(email and onboarding_available),
+            }
+        )
+
+        if not settings.stripe_webhook_secret:
+            missing.append("STRIPE_WEBHOOK_SECRET")
+        else:
+            header = build_stripe_signature_header(raw_body)
+            verification = verify_stripe_signature_header(raw_body, header)
+            detail["signature_status"] = verification.get("status")
+            detail["signature_tolerance_seconds"] = verification.get("tolerance_seconds")
+            if verification.get("status") != "ok":
+                missing.append("STRIPE_WEBHOOK_SIGNATURE_VERIFICATION")
+
+        if sample_payload["type"] != "checkout.session.completed":
+            missing.append("STRIPE_CHECKOUT_COMPLETED_EVENT")
+        if not email:
+            missing.append("STRIPE_CUSTOMER_EMAIL")
+        if amount_total <= 0:
+            missing.append("STRIPE_AMOUNT_TOTAL")
+        if currency != "usd":
+            missing.append("STRIPE_CURRENCY")
+        if not settings.packet_checkout_url:
+            missing.append("PACKET_CHECKOUT_URL")
+        if not env.get("RESEND_API_KEY"):
+            missing.append("RESEND_API_KEY")
+        if not env.get("FROM_EMAIL_FULFILLMENT"):
+            missing.append("FROM_EMAIL_FULFILLMENT")
+        if not settings.reply_to_email:
+            missing.append("REPLY_TO_EMAIL")
+        if not intake_url:
+            missing.append("PAID_INTAKE_URL")
+        if not handler_available:
+            missing.append("STRIPE_WEBHOOK_HANDLER")
+        if not onboarding_available:
+            missing.append("PAID_ONBOARDING_HANDLER")
+    except Exception as exc:
+        missing.append("PAYMENT_WEBHOOK_PREFLIGHT_EXCEPTION")
+        detail["error_type"] = type(exc).__name__
+        detail["error"] = str(exc)[:500]
+
+    missing = sorted(set(missing))
+    return {
+        "status": "ok" if not missing else "error",
+        "summary": "payment_webhook_path_ok" if not missing else "payment_webhook_path_missing",
+        "missing": missing,
+        **detail,
+    }
+
+
+def _run_payment_webhook_smoke_check_if_needed() -> dict[str, Any]:
+    now = _now()
+    interval_hours = _payment_webhook_smoke_interval_hours()
+    with _session() as session:
+        latest = session.execute(
+            select(AcquisitionEvent)
+            .where(AcquisitionEvent.event_type == PAYMENT_WEBHOOK_SMOKE_EVENT)
+            .order_by(AcquisitionEvent.created_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if latest is not None and latest.created_at is not None:
+            age_seconds = max(int((now - latest.created_at.replace(tzinfo=None)).total_seconds()), 0)
+            latest_payload = _safe_json(latest.payload_json)
+            if latest_payload.get("status") != "error" and age_seconds < interval_hours * 3600:
+                return {
+                    "status": "skipped",
+                    "summary": "recent_payment_webhook_smoke_check_exists",
+                    "latest_at": latest.created_at.isoformat(),
+                    "age_seconds": age_seconds,
+                    "interval_hours": interval_hours,
+                }
+
+        payload = _payment_webhook_preflight()
+        session.add(
+            AcquisitionEvent(
+                event_type=PAYMENT_WEBHOOK_SMOKE_EVENT,
+                prospect_external_id="relay-payment-webhook-smoke",
+                summary=str(payload.get("summary") or "payment_webhook_smoke_checked"),
+                payload_json=json.dumps(payload, ensure_ascii=False),
+            )
+        )
+        session.commit()
+        return {
+            "status": payload.get("status"),
+            "summary": payload.get("summary"),
+            "missing": payload.get("missing", []),
+            "interval_hours": interval_hours,
+            "route": payload.get("route", ""),
+        }
+
+
 def _run_delivery_smoke_check_if_needed() -> dict[str, Any]:
     now = _now()
     interval_hours = _delivery_smoke_interval_hours()
@@ -1444,6 +1600,7 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
     outbound_preflight = _active_outbound_preflight()
     public_offer_preflight = _public_offer_preflight()
     reply_autoclose_preflight = _reply_autoclose_preflight()
+    payment_webhook_preflight = _payment_webhook_preflight()
     critical_missing = [
         name
         for name in ["DATABASE_URL", "RESEND_API_KEY", "PACKET_CHECKOUT_URL", "FROM_EMAIL_FULFILLMENT"]
@@ -1455,6 +1612,8 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
         critical_missing.append("PUBLIC_OFFER_PREFLIGHT")
     if reply_autoclose_preflight.get("status") == "error" and unhandled_replies > 0:
         critical_missing.append("REPLY_AUTOCLOSE_PREFLIGHT")
+    if payment_webhook_preflight.get("status") == "error":
+        critical_missing.append("PAYMENT_WEBHOOK_PREFLIGHT")
 
     return {
         "status": "ok",
@@ -1465,6 +1624,7 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
         "outbound_preflight": outbound_preflight,
         "public_offer_preflight": public_offer_preflight,
         "reply_autoclose_preflight": reply_autoclose_preflight,
+        "payment_webhook_preflight": payment_webhook_preflight,
         "money": money,
         "intent": {
             "page_views": page_views,
@@ -2067,6 +2227,7 @@ def run_relay_success_control_tick() -> dict[str, Any]:
     actions["outbound_smoke_check"] = _run_outbound_smoke_check_if_needed()
     actions["public_offer_smoke_check"] = _run_public_offer_smoke_check_if_needed()
     actions["reply_autoclose_smoke_check"] = _run_reply_autoclose_smoke_check_if_needed()
+    actions["payment_webhook_smoke_check"] = _run_payment_webhook_smoke_check_if_needed()
     actions["inbound_conversion"] = run_inbound_conversion_sweep()
     actions["paid_intake_reminders"] = run_paid_intake_reminder_sweep(
         hours=int(os.getenv("OPS_INTAKE_REMINDER_HOURS", "12") or "12")

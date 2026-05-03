@@ -1,3 +1,6 @@
+import json
+import os
+
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from app.api.routes.acquisition_supervisor import (
@@ -11,6 +14,10 @@ from app.services.post_purchase_autopilot import (
     send_paid_onboarding_for_email,
 )
 from app.services.state_machine import EventType, StateMachineService
+from app.services.stripe_webhook_security import (
+    StripeSignatureError,
+    verify_stripe_signature_header,
+)
 from app.workers.fulfillment import process_tally_submission
 
 router = APIRouter()
@@ -40,7 +47,17 @@ def _tally_email(payload: dict) -> str:
 
 @router.post("/stripe")
 async def stripe_webhook(request: Request, stripe_signature: str | None = Header(default=None)) -> dict:
-    payload = await request.json()
+    raw_body = await request.body()
+    try:
+        signature = verify_stripe_signature_header(
+            raw_body,
+            stripe_signature,
+            tolerance_seconds=int(os.getenv("STRIPE_WEBHOOK_TOLERANCE_SECONDS", "300") or "300"),
+        )
+    except StripeSignatureError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    payload = json.loads(raw_body.decode("utf-8") or "{}")
     acquisition_result = await supervisor_stripe_webhook(_FakeRequest(payload))
 
     event_type = payload.get("type", "unknown")
@@ -56,6 +73,7 @@ async def stripe_webhook(request: Request, stripe_signature: str | None = Header
         "status": "received",
         "provider": "stripe",
         "event_type": event_type,
+        "signature": signature,
         "acquisition": acquisition_result,
         "autopilot": autopilot,
     }

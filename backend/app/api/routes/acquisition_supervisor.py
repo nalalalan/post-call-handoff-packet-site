@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 
 from app.api.admin_auth import require_relay_admin
 from app.services.acquisition_supervisor import (
@@ -13,6 +14,10 @@ from app.services.acquisition_supervisor import (
     import_from_apollo_people_search,
     import_from_apollo_search,
     tick_supervisor,
+)
+from app.services.stripe_webhook_security import (
+    StripeSignatureError,
+    verify_stripe_signature_header,
 )
 
 router = APIRouter()
@@ -60,7 +65,17 @@ async def supervisor_smartlead_webhook(request: Request) -> dict:
 
 
 @router.post("/webhooks/stripe")
-async def supervisor_stripe_webhook(request: Request) -> dict:
+async def supervisor_stripe_webhook(request: Request, stripe_signature: str | None = Header(default=None)) -> dict:
+    raw_body = await request.body() if hasattr(request, "body") else b""
+    if raw_body:
+        try:
+            verify_stripe_signature_header(
+                raw_body,
+                stripe_signature,
+                tolerance_seconds=int(os.getenv("STRIPE_WEBHOOK_TOLERANCE_SECONDS", "300") or "300"),
+            )
+        except StripeSignatureError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     payload = await request.json()
     return handle_stripe_purchase_webhook(payload)
 
