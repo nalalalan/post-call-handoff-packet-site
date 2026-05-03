@@ -827,12 +827,20 @@ async def import_from_apollo_people_search(payload: Dict[str, Any]) -> Dict[str,
     }
 
 
+async def _run_original_apollo_search(payload: dict[str, Any]) -> dict[str, Any]:
+    assert _original_apollo_search is not None
+
+    def run() -> dict[str, Any]:
+        return asyncio.run(_original_apollo_search(payload))
+
+    return await asyncio.to_thread(run)
+
+
 async def import_from_apollo_search(payload: Dict[str, Any]) -> Dict[str, Any]:
     source = str(payload.get("source") or os.getenv("ACQ_OPS_SOURCE", "apollo_people")).strip()
     if source == "apollo_people" and settings.apollo_api_key:
         return await import_from_apollo_people_search(payload)
-    assert _original_apollo_search is not None
-    return await _original_apollo_search(payload)
+    return await _run_original_apollo_search(payload)
 
 
 @router.post("/apollo-people-search")
@@ -1004,7 +1012,7 @@ async def _relay_money_loop_tick(
                 for fallback_query in _refill_query_candidates(query)[:fallback_limit]:
                     previous_refill_status = latest_refill_status
                     try:
-                        fallback_attempt = await _original_apollo_search(
+                        fallback_attempt = await _run_original_apollo_search(
                             {"q_keywords": fallback_query, "source": "apify"}
                         )
                         if isinstance(fallback_attempt, dict):
