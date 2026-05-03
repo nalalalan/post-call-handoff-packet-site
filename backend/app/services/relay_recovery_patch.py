@@ -1512,6 +1512,12 @@ def _money_loop_sleep_seconds(result: dict[str, Any] | None, default_interval: i
     if window_open and direct_due > 0 and cap_remaining > 0:
         return min(default_interval, 120), "active_send_window"
 
+    if bool(status_after.get("active_experiment_needs_sample")):
+        active_due = int(status_after.get("active_experiment_new_due_count") or 0)
+        active_target = int(status_after.get("active_experiment_sample_target") or 0)
+        if active_target > 0 and active_due < active_target:
+            return min(default_interval, 300), "active_experiment_buffering"
+
     try:
         seconds_until_open = int(status_after.get("send_window_seconds_until_open") or 0)
     except Exception:
