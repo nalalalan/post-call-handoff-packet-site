@@ -1062,6 +1062,13 @@ def _compact_money_loop_payload(payload: dict[str, Any] | None) -> dict[str, Any
         if isinstance(payload.get("post_refill_outreach_result"), dict)
         else {}
     )
+    outreach = payload.get("outreach_result") if isinstance(payload.get("outreach_result"), dict) else {}
+    success_control = payload.get("success_control") if isinstance(payload.get("success_control"), dict) else {}
+    success_control_after = (
+        payload.get("success_control_after_outreach")
+        if isinstance(payload.get("success_control_after_outreach"), dict)
+        else {}
+    )
     status_after = payload.get("status_after") if isinstance(payload.get("status_after"), dict) else {}
     refill_backoff = (
         payload.get("refill_timeout_backoff")
@@ -1134,12 +1141,24 @@ def _compact_money_loop_payload(payload: dict[str, Any] | None) -> dict[str, Any
         "direct_due_before": payload.get("direct_due_before"),
         "send_window_open_before": payload.get("send_window_open_before"),
         "outreach_phase": payload.get("outreach_phase"),
+        "sent_this_tick": payload.get("sent_this_tick"),
+        "outreach_sent": outreach.get("send_result", {}).get("sent_count")
+        if isinstance(outreach.get("send_result"), dict)
+        else outreach.get("sent_count"),
+        "outreach_summary": outreach.get("send_result", {}).get("summary")
+        if isinstance(outreach.get("send_result"), dict)
+        else outreach.get("summary"),
         "post_refill_outreach_sent": post_refill_outreach.get("send_result", {}).get("sent_count")
         if isinstance(post_refill_outreach.get("send_result"), dict)
         else None,
         "post_refill_outreach_summary": post_refill_outreach.get("send_result", {}).get("summary")
         if isinstance(post_refill_outreach.get("send_result"), dict)
         else None,
+        "success_control_status": success_control.get("status"),
+        "success_control_bottleneck": success_control.get("bottleneck"),
+        "success_control_after_status": success_control_after.get("status"),
+        "success_control_after_bottleneck": success_control_after.get("bottleneck"),
+        "success_control_phase": payload.get("success_control_phase"),
         "status_after": {
             "active_experiment_variant": status_after.get("active_experiment_variant"),
             "active_experiment_sends": status_after.get("active_experiment_sends"),

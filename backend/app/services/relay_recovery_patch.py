@@ -436,6 +436,23 @@ def _compact_outreach_result(result: Any) -> Any:
     return compact
 
 
+def _outreach_sent_count(result: Any) -> int:
+    if not isinstance(result, dict):
+        return 0
+
+    def _to_int(value: Any) -> int:
+        try:
+            return int(value or 0)
+        except Exception:
+            return 0
+
+    sent = _to_int(result.get("sent_count"))
+    send_result = result.get("send_result")
+    if isinstance(send_result, dict):
+        sent = max(sent, _to_int(send_result.get("sent_count")))
+    return max(sent, 0)
+
+
 def _refill_capacity_count(status: dict[str, Any]) -> int:
     if status.get("active_experiment_needs_sample"):
         return int(status.get("active_experiment_new_due_count") or 0)
@@ -568,7 +585,9 @@ def _log_money_loop_tick(result: dict[str, Any]) -> None:
             f"refill={_status_label(result.get('refill_result'))} "
             f"outreach={_status_label(result.get('outreach_result'))} "
             f"post_refill_outreach={_status_label(result.get('post_refill_outreach_result'))} "
-            f"success={_status_label(result.get('success_control'))}"
+            f"success={_status_label(result.get('success_control'))} "
+            f"success_after={_status_label(result.get('success_control_after_outreach'))} "
+            f"sent_this_tick={int(result.get('sent_this_tick') or 0)}"
         )
         with SessionLocal() as session:
             session.add(
@@ -1189,22 +1208,29 @@ async def _relay_money_loop_tick(
     send_window_open = bool(status.get("send_window_is_open"))
     min_direct_due = int(os.getenv("AO_RELAY_MIN_DIRECT_DUE", str(max(settings.buyer_acq_daily_send_cap, 10))) or 10)
 
-    if send_live:
+    async def _run_success_control_tick_for_phase(phase: str) -> dict[str, Any]:
+        if not send_live:
+            return {
+                "status": "skipped",
+                "reason": "send_live_false",
+                "phase": phase,
+            }
         try:
             from app.services.relay_success_controller import run_relay_success_control_tick
 
-            success_control = await asyncio.to_thread(run_relay_success_control_tick)
+            result = await asyncio.to_thread(run_relay_success_control_tick)
+            if isinstance(result, dict):
+                result.setdefault("phase", phase)
+            return result
         except Exception as exc:
-            success_control = {
+            return {
                 "status": "error",
                 "reason": "success_control_failed",
+                "phase": phase,
                 "error": str(exc),
             }
-    else:
-        success_control = {
-            "status": "skipped",
-            "reason": "send_live_false",
-        }
+
+    success_control = await _run_success_control_tick_for_phase("before_outreach")
 
     outreach_phase = "after_refill"
     send_first = send_live and send_window_open and sendable_due > 0 and cap_remaining > 0
@@ -1437,12 +1463,23 @@ async def _relay_money_loop_tick(
             "snapshot": _compact_status_for_loop(await asyncio.to_thread(outreach.outreach_status)),
         }
         post_refill_outreach_result = None
+    sent_this_tick = _outreach_sent_count(outreach_result) + _outreach_sent_count(post_refill_outreach_result)
+    if send_live and sent_this_tick > 0:
+        success_control_after_outreach = await _run_success_control_tick_for_phase("after_outreach_send")
+    else:
+        success_control_after_outreach = {
+            "status": "skipped",
+            "reason": "no_outreach_sent",
+            "phase": "after_outreach_send",
+        }
     result = {
         "refill_result": refill_result,
         "outreach_result": outreach_result,
         "post_refill_outreach_result": post_refill_outreach_result,
         "success_control": success_control,
-        "success_control_phase": "before_refill",
+        "success_control_after_outreach": success_control_after_outreach,
+        "success_control_phase": "after_outreach_send" if sent_this_tick > 0 else "before_outreach",
+        "sent_this_tick": sent_this_tick,
         "direct_due_before": direct_due,
         "active_experiment_needs_sample": active_experiment_needs_sample,
         "active_experiment_new_due_before": active_experiment_new_due,
@@ -1500,7 +1537,12 @@ async def _relay_money_loop_tick_with_timeout(**kwargs: Any) -> dict[str, Any]:
                 "status": "unknown",
                 "reason": "money_loop_tick_timeout",
             },
+            "success_control_after_outreach": {
+                "status": "unknown",
+                "reason": "money_loop_tick_timeout",
+            },
             "success_control_phase": "unknown",
+            "sent_this_tick": 0,
             "outreach_phase": "timeout",
             "force_refill": bool(kwargs.get("force_refill", False)),
             "send_live": bool(kwargs.get("send_live", True)),
