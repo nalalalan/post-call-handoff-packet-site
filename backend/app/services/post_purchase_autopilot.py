@@ -512,6 +512,86 @@ def run_messy_notes_checkout_followup_sweep(hours: int = 2) -> dict[str, Any]:
     }
 
 
+def run_messy_notes_second_followup_sweep(hours: int = 24) -> dict[str, Any]:
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    sent_count = 0
+    skipped = 0
+    failures: list[str] = []
+
+    with _session() as session:
+        first_followups = session.execute(
+            select(AcquisitionEvent)
+            .where(AcquisitionEvent.event_type == "autopilot_messy_notes_checkout_followup_sent")
+            .where(AcquisitionEvent.created_at <= cutoff)
+            .order_by(AcquisitionEvent.created_at.asc())
+            .limit(100)
+        ).scalars().all()
+
+        send_candidates: list[RelayIntentLead] = []
+        seen_leads: set[int] = set()
+        for followup in first_followups:
+            payload = _safe_json(followup.payload_json)
+            lead_id = payload.get("relay_lead_id")
+            if lead_id is None and followup.prospect_external_id.startswith("relay-lead:"):
+                lead_id = followup.prospect_external_id.split(":", 1)[1].strip()
+            try:
+                lead_id_int = int(lead_id)
+            except Exception:
+                skipped += 1
+                continue
+            if lead_id_int in seen_leads:
+                skipped += 1
+                continue
+            seen_leads.add(lead_id_int)
+
+            external_id = f"relay-lead:{lead_id_int}"
+            if _event_exists(session, external_id, "autopilot_messy_notes_second_followup_sent"):
+                skipped += 1
+                continue
+
+            lead = session.execute(
+                select(RelayIntentLead).where(RelayIntentLead.id == lead_id_int).limit(1)
+            ).scalar_one_or_none()
+            if lead is None or not lead.email:
+                skipped += 1
+                continue
+            if _paid_for_email(session, lead.email):
+                skipped += 1
+                continue
+            send_candidates.append(lead)
+
+    for lead in send_candidates:
+        try:
+            external_id = f"relay-lead:{lead.id}"
+            blocks = [
+                _p("Closing the loop on your Relay notes."),
+                _p("If you still want me to turn that rough call into the actual handoff packet, the $40 one-call test is the clean next step."),
+                _a("Start the $40 packet", settings.packet_checkout_url),
+                _p("If you want to add or replace the rough notes first, send them here."),
+                _a("Send messy notes", _notes_url()),
+                _p("- Alan"),
+            ]
+            _send_conversion_email(
+                to_email=lead.email,
+                subject="Should I still turn this into the packet?",
+                blocks=blocks,
+                event_type="autopilot_messy_notes_second_followup_sent",
+                prospect_external_id=external_id,
+                payload={"relay_lead_id": lead.id, "hours": hours},
+            )
+            sent_count += 1
+        except Exception as exc:
+            failures.append(str(exc)[:500])
+
+    return {
+        "status": "ok",
+        "sent_count": sent_count,
+        "skipped": skipped,
+        "failures": failures,
+        "hours": hours,
+    }
+
+
 def run_sample_request_notes_followup_sweep(hours: int = 24) -> dict[str, Any]:
     cutoff = datetime.utcnow() - timedelta(hours=hours)
     sent_count = 0
@@ -567,6 +647,96 @@ def run_sample_request_notes_followup_sweep(hours: int = 24) -> dict[str, Any]:
                 subject="Have one messy call to test?",
                 blocks=blocks,
                 event_type="autopilot_sample_notes_followup_sent",
+                prospect_external_id=external_id,
+                payload={"relay_lead_id": lead.id, "hours": hours},
+            )
+            sent_count += 1
+        except Exception as exc:
+            failures.append(str(exc)[:500])
+
+    return {
+        "status": "ok",
+        "sent_count": sent_count,
+        "skipped": skipped,
+        "failures": failures,
+        "hours": hours,
+    }
+
+
+def run_sample_request_second_followup_sweep(hours: int = 72) -> dict[str, Any]:
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    sent_count = 0
+    skipped = 0
+    failures: list[str] = []
+
+    with _session() as session:
+        first_followups = session.execute(
+            select(AcquisitionEvent)
+            .where(AcquisitionEvent.event_type == "autopilot_sample_notes_followup_sent")
+            .where(AcquisitionEvent.created_at <= cutoff)
+            .order_by(AcquisitionEvent.created_at.asc())
+            .limit(100)
+        ).scalars().all()
+
+        send_candidates: list[RelayIntentLead] = []
+        seen_leads: set[int] = set()
+        for followup in first_followups:
+            payload = _safe_json(followup.payload_json)
+            lead_id = payload.get("relay_lead_id")
+            if lead_id is None and followup.prospect_external_id.startswith("relay-lead:"):
+                lead_id = followup.prospect_external_id.split(":", 1)[1].strip()
+            try:
+                lead_id_int = int(lead_id)
+            except Exception:
+                skipped += 1
+                continue
+            if lead_id_int in seen_leads:
+                skipped += 1
+                continue
+            seen_leads.add(lead_id_int)
+
+            external_id = f"relay-lead:{lead_id_int}"
+            if _event_exists(session, external_id, "autopilot_sample_second_followup_sent"):
+                skipped += 1
+                continue
+
+            lead = session.execute(
+                select(RelayIntentLead).where(RelayIntentLead.id == lead_id_int).limit(1)
+            ).scalar_one_or_none()
+            if lead is None or not lead.email:
+                skipped += 1
+                continue
+            email = (lead.email or "").strip().lower()
+            if _paid_for_email(session, email):
+                skipped += 1
+                continue
+            messy_notes = session.execute(
+                select(RelayIntentLead.id)
+                .where(RelayIntentLead.email == email)
+                .where(RelayIntentLead.source.ilike("%messy_notes%"))
+                .limit(1)
+            ).scalar_one_or_none()
+            if messy_notes is not None:
+                skipped += 1
+                continue
+            send_candidates.append(lead)
+
+    for lead in send_candidates:
+        try:
+            external_id = f"relay-lead:{lead.id}"
+            blocks = [
+                _p("Checking once more after the Relay sample."),
+                _p("The fastest useful test is still one rough call note. Send the messy version and Relay will keep the next step simple."),
+                _a("Send messy notes", _notes_url()),
+                _p("If you already know you want the paid packet, the one-call test is $40."),
+                _a("Start the $40 packet", settings.packet_checkout_url),
+                _p("- Alan"),
+            ]
+            _send_conversion_email(
+                to_email=lead.email,
+                subject="Still have one call to test?",
+                blocks=blocks,
+                event_type="autopilot_sample_second_followup_sent",
                 prospect_external_id=external_id,
                 payload={"relay_lead_id": lead.id, "hours": hours},
             )
@@ -775,12 +945,16 @@ def run_checkout_intent_second_followup_sweep(hours: int = 24) -> dict[str, Any]
 
 def run_inbound_conversion_sweep() -> dict[str, Any]:
     messy_hours = int(os.getenv("RELAY_MESSY_NOTES_FOLLOWUP_HOURS", "2") or "2")
+    messy_second_hours = int(os.getenv("RELAY_MESSY_NOTES_SECOND_FOLLOWUP_HOURS", "24") or "24")
     sample_hours = int(os.getenv("RELAY_SAMPLE_FOLLOWUP_HOURS", "24") or "24")
+    sample_second_hours = int(os.getenv("RELAY_SAMPLE_SECOND_FOLLOWUP_HOURS", "72") or "72")
     checkout_hours = int(os.getenv("RELAY_CHECKOUT_FOLLOWUP_HOURS", "1") or "1")
     checkout_second_hours = int(os.getenv("RELAY_CHECKOUT_SECOND_FOLLOWUP_HOURS", "24") or "24")
     return {
         "messy_notes_followup": run_messy_notes_checkout_followup_sweep(hours=messy_hours),
+        "messy_notes_second_followup": run_messy_notes_second_followup_sweep(hours=messy_second_hours),
         "sample_request_followup": run_sample_request_notes_followup_sweep(hours=sample_hours),
+        "sample_request_second_followup": run_sample_request_second_followup_sweep(hours=sample_second_hours),
         "checkout_intent_followup": run_checkout_intent_followup_sweep(hours=checkout_hours),
         "checkout_intent_second_followup": run_checkout_intent_second_followup_sweep(hours=checkout_second_hours),
     }

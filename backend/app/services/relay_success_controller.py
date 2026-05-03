@@ -137,12 +137,16 @@ def _money_metrics(session: Session, *, since: datetime) -> dict[str, Any]:
 
 def _due_followup_counts(session: Session, *, now: datetime) -> dict[str, int]:
     messy_cutoff = now - timedelta(hours=int(os.getenv("RELAY_MESSY_NOTES_FOLLOWUP_HOURS", "2") or "2"))
+    messy_second_cutoff = now - timedelta(hours=int(os.getenv("RELAY_MESSY_NOTES_SECOND_FOLLOWUP_HOURS", "24") or "24"))
     sample_cutoff = now - timedelta(hours=int(os.getenv("RELAY_SAMPLE_FOLLOWUP_HOURS", "24") or "24"))
+    sample_second_cutoff = now - timedelta(hours=int(os.getenv("RELAY_SAMPLE_SECOND_FOLLOWUP_HOURS", "72") or "72"))
     checkout_cutoff = now - timedelta(hours=int(os.getenv("RELAY_CHECKOUT_FOLLOWUP_HOURS", "1") or "1"))
     checkout_second_cutoff = now - timedelta(hours=int(os.getenv("RELAY_CHECKOUT_SECOND_FOLLOWUP_HOURS", "24") or "24"))
 
     messy_due = 0
+    messy_second_due = 0
     sample_due = 0
+    sample_second_due = 0
     checkout_due = 0
     checkout_second_due = 0
 
@@ -164,6 +168,40 @@ def _due_followup_counts(session: Session, *, now: datetime) -> dict[str, int]:
         if exists is None:
             messy_due += 1
 
+    first_messy_followups = session.execute(
+        select(AcquisitionEvent)
+        .where(AcquisitionEvent.event_type == "autopilot_messy_notes_checkout_followup_sent")
+        .where(AcquisitionEvent.created_at <= messy_second_cutoff)
+        .limit(100)
+    ).scalars().all()
+    seen_messy_leads: set[int] = set()
+    for followup in first_messy_followups:
+        payload = _safe_json(followup.payload_json)
+        lead_id = payload.get("relay_lead_id")
+        if lead_id is None and followup.prospect_external_id.startswith("relay-lead:"):
+            lead_id = followup.prospect_external_id.split(":", 1)[1].strip()
+        try:
+            lead_id_int = int(lead_id)
+        except Exception:
+            continue
+        if lead_id_int in seen_messy_leads:
+            continue
+        seen_messy_leads.add(lead_id_int)
+        exists = session.execute(
+            select(AcquisitionEvent.id)
+            .where(AcquisitionEvent.prospect_external_id == f"relay-lead:{lead_id_int}")
+            .where(AcquisitionEvent.event_type == "autopilot_messy_notes_second_followup_sent")
+            .limit(1)
+        ).scalar_one_or_none()
+        if exists is not None:
+            continue
+        lead = session.execute(
+            select(RelayIntentLead).where(RelayIntentLead.id == lead_id_int).limit(1)
+        ).scalar_one_or_none()
+        if lead is None or not lead.email or _paid_for_email(session, lead.email):
+            continue
+        messy_second_due += 1
+
     sample_leads = session.execute(
         select(RelayIntentLead)
         .where(RelayIntentLead.source.ilike("%sample%"))
@@ -181,6 +219,51 @@ def _due_followup_counts(session: Session, *, now: datetime) -> dict[str, int]:
         ).scalar_one_or_none()
         if exists is None:
             sample_due += 1
+
+    first_sample_followups = session.execute(
+        select(AcquisitionEvent)
+        .where(AcquisitionEvent.event_type == "autopilot_sample_notes_followup_sent")
+        .where(AcquisitionEvent.created_at <= sample_second_cutoff)
+        .limit(100)
+    ).scalars().all()
+    seen_sample_leads: set[int] = set()
+    for followup in first_sample_followups:
+        payload = _safe_json(followup.payload_json)
+        lead_id = payload.get("relay_lead_id")
+        if lead_id is None and followup.prospect_external_id.startswith("relay-lead:"):
+            lead_id = followup.prospect_external_id.split(":", 1)[1].strip()
+        try:
+            lead_id_int = int(lead_id)
+        except Exception:
+            continue
+        if lead_id_int in seen_sample_leads:
+            continue
+        seen_sample_leads.add(lead_id_int)
+        exists = session.execute(
+            select(AcquisitionEvent.id)
+            .where(AcquisitionEvent.prospect_external_id == f"relay-lead:{lead_id_int}")
+            .where(AcquisitionEvent.event_type == "autopilot_sample_second_followup_sent")
+            .limit(1)
+        ).scalar_one_or_none()
+        if exists is not None:
+            continue
+        lead = session.execute(
+            select(RelayIntentLead).where(RelayIntentLead.id == lead_id_int).limit(1)
+        ).scalar_one_or_none()
+        if lead is None or not lead.email:
+            continue
+        email = (lead.email or "").strip().lower()
+        if _paid_for_email(session, email):
+            continue
+        messy_notes = session.execute(
+            select(RelayIntentLead.id)
+            .where(RelayIntentLead.email == email)
+            .where(RelayIntentLead.source.ilike("%messy_notes%"))
+            .limit(1)
+        ).scalar_one_or_none()
+        if messy_notes is not None:
+            continue
+        sample_second_due += 1
 
     checkout_events = session.execute(
         select(RelayIntentEvent)
@@ -270,7 +353,9 @@ def _due_followup_counts(session: Session, *, now: datetime) -> dict[str, int]:
 
     return {
         "messy_notes_due": messy_due,
+        "messy_notes_second_due": messy_second_due,
         "sample_request_due": sample_due,
+        "sample_request_second_due": sample_second_due,
         "checkout_intent_due": checkout_due,
         "checkout_intent_second_due": checkout_second_due,
     }
@@ -310,7 +395,9 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
         onboarding = _event_count(session, "autopilot_paid_onboarding_sent", since=since)
         inbound_followups = (
             _event_count(session, "autopilot_messy_notes_checkout_followup_sent", since=since)
+            + _event_count(session, "autopilot_messy_notes_second_followup_sent", since=since)
             + _event_count(session, "autopilot_sample_notes_followup_sent", since=since)
+            + _event_count(session, "autopilot_sample_second_followup_sent", since=since)
             + _event_count(session, "autopilot_checkout_intent_followup_sent", since=since)
             + _event_count(session, "autopilot_checkout_intent_second_followup_sent", since=since)
         )
@@ -351,7 +438,9 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
         "conversion": {
             "inbound_followups_sent": inbound_followups,
             "messy_notes_followups_due": due_followups["messy_notes_due"],
+            "messy_notes_second_followups_due": due_followups["messy_notes_second_due"],
             "sample_followups_due": due_followups["sample_request_due"],
+            "sample_second_followups_due": due_followups["sample_request_second_due"],
             "checkout_followups_due": due_followups["checkout_intent_due"],
             "checkout_second_followups_due": due_followups["checkout_intent_second_due"],
             "paid_onboarding_sent": onboarding,
@@ -373,7 +462,11 @@ def _bottleneck(snapshot: dict[str, Any]) -> str:
         return "paid_fulfillment"
     if int(conversion.get("messy_notes_followups_due") or 0) > 0:
         return "messy_notes_to_payment"
+    if int(conversion.get("messy_notes_second_followups_due") or 0) > 0:
+        return "messy_notes_to_payment"
     if int(conversion.get("sample_followups_due") or 0) > 0:
+        return "sample_to_notes"
+    if int(conversion.get("sample_second_followups_due") or 0) > 0:
         return "sample_to_notes"
     if int(conversion.get("checkout_followups_due") or 0) > 0:
         return "checkout_to_payment"
