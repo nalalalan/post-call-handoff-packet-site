@@ -196,6 +196,70 @@ def _operator_mode(
     }
 
 
+def _launch_readiness_contract(
+    *,
+    loop_status: str,
+    delivery_smoke_status: str,
+    revenue_ladder: dict[str, Any],
+    active_sends: int,
+    active_target: int,
+    active_remaining: int,
+    active_due: int,
+    cap_remaining: int,
+    sample_windows_to_complete: int,
+    next_window: str | None,
+    experiment_decision_state: str,
+    experiment_decision_next: str,
+    active_signal_replies: int,
+    active_signal_payments: int,
+) -> dict[str, Any]:
+    blockers: list[str] = []
+    if loop_status in {"disabled", "error", "stuck", "late"}:
+        blockers.append(f"money loop is {loop_status}")
+    if delivery_smoke_status == "error":
+        blockers.append("delivery smoke check is failing")
+    if not revenue_ladder.get("entry_offer_ready"):
+        blockers.append("entry checkout link is not configured")
+    if active_target <= 0:
+        blockers.append("active experiment sample target is missing")
+    if active_remaining > 0 and active_due <= 0:
+        blockers.append("active experiment needs more queued first-touch leads")
+    if active_remaining > 0 and sample_windows_to_complete <= 0:
+        blockers.append("active experiment has no estimated send window capacity")
+    if active_remaining > 0 and not str(next_window or "").strip():
+        blockers.append("next send window is not known")
+
+    if active_signal_payments > 0:
+        interrupt_rule = "interrupt for fulfillment and keep the winning lane stable"
+    elif active_signal_replies > 0:
+        interrupt_rule = "interrupt to close real replies through the paid next step"
+    else:
+        interrupt_rule = "do not interrupt unless replies, checkout/payment signal, or system health changes"
+
+    if active_remaining > 0:
+        proof_target = f"collect {active_remaining} more active-variant sends"
+        success_metric = "first real reply, checkout/payment signal, or completed active sample"
+    else:
+        proof_target = "judge the completed active sample"
+        success_metric = "active replies/payments decide whether to keep stable or rotate one variable"
+
+    return {
+        "ready": not blockers,
+        "blockers": blockers,
+        "phase": experiment_decision_state,
+        "proof_target": proof_target,
+        "success_metric": success_metric,
+        "review_rule": "do not judge the offer until the active sample is complete or real buyer signal appears",
+        "interrupt_rule": interrupt_rule,
+        "next_decision": experiment_decision_next,
+        "active_experiment_progress": f"{active_sends}/{active_target}" if active_target else "",
+        "active_experiment_sends_remaining": active_remaining,
+        "active_experiment_due_now": active_due,
+        "estimated_windows_remaining": sample_windows_to_complete,
+        "next_autonomous_window": next_window,
+    }
+
+
 def _internal_emails() -> set[str]:
     configured = os.getenv("RELAY_INTERNAL_EMAILS", "pham.alann@gmail.com").split(",")
     return {email.strip().lower() for email in configured if email.strip()}
@@ -1288,11 +1352,28 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
                 active_autonomous_ready=active_autonomous_ready,
                 active_queue_ready=active_queue_ready,
             )
+            launch_readiness = _launch_readiness_contract(
+                loop_status=loop_status,
+                delivery_smoke_status=delivery_smoke_status,
+                revenue_ladder=revenue_ladder,
+                active_sends=active_sends,
+                active_target=active_target,
+                active_remaining=active_remaining,
+                active_due=active_due,
+                cap_remaining=cap_remaining,
+                sample_windows_to_complete=sample_windows_to_complete,
+                next_window=outreach.get("send_window_next_open_local"),
+                experiment_decision_state=experiment_decision_state,
+                experiment_decision_next=experiment_decision_next,
+                active_signal_replies=active_signal_replies,
+                active_signal_payments=active_signal_payments,
+            )
             checks["money_system"] = {
                 "state": money_state,
                 "gross_usd": money.get("gross_usd", 0),
                 "payments": payments,
                 "operator_mode": operator_mode,
+                "launch_readiness": launch_readiness,
                 "revenue_ladder": revenue_ladder,
                 "close_path": {
                     "replies": replies,
