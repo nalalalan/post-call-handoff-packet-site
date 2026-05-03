@@ -261,7 +261,7 @@ def _status_label(value: Any) -> str:
     status = value.get("status")
     if isinstance(status, str) and status.strip():
         label = status.strip()
-        if label in {"degraded_ok", "error"}:
+        if label in {"ok", "degraded_ok", "error"}:
             details: list[str] = []
             reason = str(value.get("reason") or "").strip()
             if reason:
@@ -271,6 +271,9 @@ def _status_label(value: Any) -> str:
                 details.append(f"error_type={error_type}")
             elif value.get("error"):
                 details.append("error_present=1")
+            for key in ("source", "searched", "enriched_with_email", "missing_email_after_enrichment", "upserted"):
+                if value.get(key) is not None:
+                    details.append(f"{key}={value.get(key)}")
             fallback = value.get("fallback_result")
             if isinstance(fallback, dict):
                 fallback_status = str(fallback.get("status") or "").strip()
@@ -386,6 +389,59 @@ def _next_money_move(status: dict[str, Any]) -> str:
     if int(status.get("generic_paused_count") or 0) > 0:
         return "Generic inboxes are paused; refill with Apollo people leads."
     return "Refill direct decision-maker leads before increasing volume."
+
+
+def _refill_query_candidates(primary_query: str | None) -> list[str]:
+    candidates: list[str] = []
+
+    def add(value: Any) -> None:
+        text = str(value or "").strip()
+        if text and text not in candidates:
+            candidates.append(text)
+
+    add(primary_query)
+    try:
+        from app.services.relay_performance import active_relay_experiment
+
+        experiment = active_relay_experiment()
+        for query in experiment.get("query_rotation", []) or []:
+            add(query)
+    except Exception:
+        pass
+    for query in os.getenv("ACQ_OPS_QUERY_ROTATION", "").split("|"):
+        add(query)
+    for query in [
+        "paid media agency founder",
+        "google ads agency owner",
+        "performance marketing agency owner",
+        "ppc agency owner",
+    ]:
+        add(query)
+    try:
+        limit = max(int(os.getenv("AO_RELAY_REFILL_QUERY_ATTEMPTS", "3") or 3), 1)
+    except Exception:
+        limit = 3
+    return candidates[:limit]
+
+
+def _compact_refill_attempt(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": result.get("status"),
+        "source": result.get("source"),
+        "q_keywords": result.get("q_keywords"),
+        "searched": result.get("searched"),
+        "enriched_with_email": result.get("enriched_with_email"),
+        "missing_email_after_enrichment": result.get("missing_email_after_enrichment"),
+        "upserted": result.get("upserted"),
+        "skipped_missing_email": result.get("skipped_missing_email"),
+        "skipped_bad_emails": result.get("skipped_bad_emails"),
+        "skipped_generic_inboxes": result.get("skipped_generic_inboxes"),
+        "apollo_endpoint": result.get("apollo_endpoint"),
+        "apollo_primary_error_status": result.get("apollo_primary_error_status"),
+        "enrich_errors": result.get("enrich_errors"),
+        "error_type": result.get("error_type"),
+        "reason": result.get("reason"),
+    }
 
 
 def _patched_send_due_sequence_messages(limit: int | None = None) -> dict[str, Any]:
@@ -679,20 +735,50 @@ async def _relay_money_loop_tick(
     elif force_refill or refill_due < min_direct_due:
         query = refill_query or ops.choose_query()
         importer = getattr(ops, "import_from_apollo_people_search", import_from_apollo_people_search)
-        try:
-            refill_result = await importer(
-                {
-                    "q_keywords": query,
-                    "per_page": refill_per_page or int(os.getenv("AO_RELAY_REFILL_PER_PAGE", "50") or 50),
-                }
-            )
-        except Exception as exc:
+        refill_attempts: list[dict[str, Any]] = []
+        last_exc: Exception | None = None
+        for attempt_query in _refill_query_candidates(query):
+            try:
+                attempt = await importer(
+                    {
+                        "q_keywords": attempt_query,
+                        "per_page": refill_per_page or int(os.getenv("AO_RELAY_REFILL_PER_PAGE", "50") or 50),
+                    }
+                )
+                if isinstance(attempt, dict):
+                    attempt.setdefault("q_keywords", attempt_query)
+                    refill_attempts.append(_compact_refill_attempt(attempt))
+                    refill_result = attempt
+                    if int(attempt.get("upserted") or 0) > 0:
+                        break
+                    if not active_experiment_needs_sample:
+                        break
+                else:
+                    refill_result = {"status": "error", "reason": "unexpected_refill_result"}
+            except Exception as exc:
+                last_exc = exc
+                refill_attempts.append(
+                    {
+                        "status": "error",
+                        "reason": "apollo_refill_failed",
+                        "error_type": type(exc).__name__,
+                        "q_keywords": attempt_query,
+                    }
+                )
+                continue
+
+        if refill_attempts and isinstance(refill_result, dict):
+            refill_result["attempts"] = refill_attempts
+
+        if last_exc is not None and not any(int(attempt.get("upserted") or 0) > 0 for attempt in refill_attempts):
+            exc = last_exc
             refill_result = {
                 "status": "error",
                 "reason": "apollo_refill_failed",
                 "error_type": type(exc).__name__,
                 "error": str(exc),
                 "q_keywords": query,
+                "attempts": refill_attempts,
             }
             if _original_apollo_search is not None:
                 try:
@@ -703,6 +789,7 @@ async def _relay_money_loop_tick(
                         "error_type": type(exc).__name__,
                         "error": str(exc),
                         "q_keywords": query,
+                        "attempts": refill_attempts,
                         "fallback_result": fallback_result,
                     }
                 except Exception as fallback_exc:

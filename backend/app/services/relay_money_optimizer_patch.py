@@ -1095,6 +1095,156 @@ def optimized_send_test_email(to_email: str) -> dict[str, Any]:
         }
 
 
+def _apollo_email(person: dict[str, Any]) -> str:
+    return _normalized_email(
+        str(
+            person.get("email")
+            or person.get("contact_email")
+            or person.get("work_email")
+            or person.get("business_email")
+            or ""
+        )
+    )
+
+
+def _apollo_org(person: dict[str, Any]) -> dict[str, Any]:
+    organization = person.get("organization")
+    return organization if isinstance(organization, dict) else {}
+
+
+def _apollo_person_id(person: dict[str, Any]) -> str:
+    return str(person.get("id") or person.get("person_id") or person.get("apollo_id") or "").strip()
+
+
+def _apollo_person_key(person: dict[str, Any]) -> str:
+    return (
+        _apollo_person_id(person)
+        or str(person.get("linkedin_url") or person.get("linkedin") or "").strip().lower()
+        or _normalized_email(str(person.get("email") or person.get("contact_email") or ""))
+        or str(person.get("name") or "").strip().lower()
+    )
+
+
+def _apollo_enrichment_detail(person: dict[str, Any]) -> dict[str, Any]:
+    organization = _apollo_org(person)
+    website = (
+        organization.get("website_url")
+        or person.get("website_url")
+        or person.get("website")
+        or person.get("domain")
+        or ""
+    )
+    detail = {
+        "id": _apollo_person_id(person),
+        "first_name": str(person.get("first_name") or "").strip(),
+        "last_name": str(person.get("last_name") or "").strip(),
+        "name": str(person.get("name") or "").strip(),
+        "linkedin_url": str(person.get("linkedin_url") or person.get("linkedin") or "").strip(),
+        "domain": str(website or "").strip().lower().removeprefix("https://").removeprefix("http://").split("/")[0].removeprefix("www."),
+        "organization_name": str(organization.get("name") or person.get("company_name") or "").strip(),
+    }
+    return {key: value for key, value in detail.items() if value}
+
+
+def _apollo_primary_person(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    for key in ("person", "contact", "match"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value
+    return payload
+
+
+def _apollo_bulk_people(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    containers: list[Any] = [payload]
+    data = payload.get("data")
+    if isinstance(data, dict):
+        containers.append(data)
+    for container in containers:
+        if not isinstance(container, dict):
+            continue
+        for key in ("people", "contacts", "matches", "results"):
+            value = container.get(key)
+            if isinstance(value, list):
+                return [_apollo_primary_person(item) for item in value if isinstance(_apollo_primary_person(item), dict)]
+    person = _apollo_primary_person(payload)
+    return [person] if person else []
+
+
+def _merge_apollo_person(base: dict[str, Any], enriched: dict[str, Any]) -> dict[str, Any]:
+    organization = _apollo_org(base) or _apollo_org(enriched)
+    merged = {**base, **enriched}
+    if organization:
+        merged["organization"] = {**organization, **_apollo_org(enriched)}
+    return merged
+
+
+async def _enrich_apollo_rows_with_email(
+    client: ApolloClient,
+    rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    enriched_rows = [dict(row) for row in rows]
+    missing = [row for row in enriched_rows if not _apollo_email(row)]
+    stats: dict[str, Any] = {
+        "enrich_attempted": len(missing),
+        "enriched_with_email": 0,
+        "enrich_errors": [],
+    }
+    if not missing:
+        return enriched_rows, stats
+
+    reveal_personal = os.getenv("APOLLO_REVEAL_PERSONAL_EMAILS", "").strip().lower() in {"1", "true", "yes"}
+    run_waterfall = os.getenv("APOLLO_RUN_WATERFALL_EMAIL", "").strip().lower() in {"1", "true", "yes"}
+
+    enriched_by_key: dict[str, dict[str, Any]] = {}
+    for start in range(0, len(missing), 10):
+        batch = missing[start : start + 10]
+        details = [_apollo_enrichment_detail(row) for row in batch]
+        detail_pairs = [(row, detail) for row, detail in zip(batch, details) if detail]
+        if not detail_pairs:
+            continue
+        try:
+            bulk = await client.bulk_enrich_people(
+                [detail for _, detail in detail_pairs],
+                reveal_personal_emails=reveal_personal,
+                run_waterfall_email=run_waterfall,
+            )
+            people = _apollo_bulk_people(bulk)
+        except Exception as exc:
+            stats["enrich_errors"].append(type(exc).__name__)
+            people = []
+            for _, detail in detail_pairs:
+                try:
+                    people.append(_apollo_primary_person(await client.enrich_person(detail)))
+                except Exception as single_exc:
+                    stats["enrich_errors"].append(type(single_exc).__name__)
+
+        keyed_people = {_apollo_person_key(person): person for person in people if _apollo_person_key(person)}
+        for row, _detail in detail_pairs:
+            key = _apollo_person_key(row)
+            person = keyed_people.get(key)
+            if person is None and people:
+                person = people.pop(0)
+            if person and _apollo_email(person):
+                enriched_by_key[key or _apollo_person_key(person)] = person
+
+    for index, row in enumerate(enriched_rows):
+        if _apollo_email(row):
+            continue
+        key = _apollo_person_key(row)
+        enriched = enriched_by_key.get(key)
+        if enriched:
+            merged = _merge_apollo_person(row, enriched)
+            enriched_rows[index] = merged
+            if _apollo_email(merged):
+                stats["enriched_with_email"] += 1
+
+    stats["enrich_errors"] = sorted(set(stats["enrich_errors"]))
+    stats["missing_email_after_enrichment"] = sum(1 for row in enriched_rows if not _apollo_email(row))
+    return enriched_rows, stats
+
+
 async def optimized_import_from_apollo_people_search(payload: dict[str, Any]) -> dict[str, Any]:
     import app.services.acquisition_supervisor as acq
 
@@ -1129,21 +1279,24 @@ async def optimized_import_from_apollo_people_search(payload: dict[str, Any]) ->
         payload.get("person_seniorities") or ["owner", "founder", "c_suite", "partner", "vp", "head", "director"],
     )
     search_payload.setdefault("organization_locations", payload.get("organization_locations") or [settings.default_country])
-    search_payload.setdefault("contact_email_status", payload.get("contact_email_status") or ["verified", "guessed"])
+    search_payload.setdefault("contact_email_status", payload.get("contact_email_status") or ["verified"])
     if q_keywords:
         search_payload.setdefault("q_keywords", q_keywords)
 
     result = await client.search_people(search_payload)
-    rows = acq._extract_people_rows(result)
+    rows = [row for row in acq._extract_people_rows(result) if isinstance(row, dict)]
+    rows, enrich_stats = await _enrich_apollo_rows_with_email(client, rows)
 
     with acq._session() as session:
         count = 0
         skipped_bad = 0
         skipped_generic = 0
+        skipped_missing_email = 0
         for person in rows:
             organization = person.get("organization") or {}
-            email = person.get("email") or person.get("contact_email") or ""
+            email = _apollo_email(person)
             if not email:
+                skipped_missing_email += 1
                 continue
             if _is_placeholder_email(email):
                 skipped_bad += 1
@@ -1174,8 +1327,15 @@ async def optimized_import_from_apollo_people_search(payload: dict[str, Any]) ->
         "source": "apollo_people",
         "searched": len(rows),
         "upserted": count,
+        "enriched_with_email": enrich_stats.get("enriched_with_email", 0),
+        "enrich_attempted": enrich_stats.get("enrich_attempted", 0),
+        "missing_email_after_enrichment": enrich_stats.get("missing_email_after_enrichment", 0),
+        "enrich_errors": enrich_stats.get("enrich_errors", []),
+        "apollo_endpoint": result.get("_apollo_endpoint"),
+        "apollo_primary_error_status": result.get("_apollo_primary_error_status"),
         "skipped_bad_emails": skipped_bad,
         "skipped_generic_inboxes": skipped_generic,
+        "skipped_missing_email": skipped_missing_email,
         "apollo_payload": {
             key: value
             for key, value in search_payload.items()
