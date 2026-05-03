@@ -92,24 +92,28 @@ BUYER_TITLE_TERMS = {
 OPTIMIZED_STEP_TEMPLATES = [
     StepTemplate(
         step_number=1,
-        subject="client call recaps",
+        subject="client call follow-up",
         body=(
             "Hey - quick question.\n\n"
-            "I built Relay to turn rough notes from one client or sales call into the finished recap, follow-up draft, next steps, and CRM-ready update.\n\n"
+            "I built Relay to turn messy notes from one client or sales call into the finished recap, follow-up draft, next steps, and CRM-ready update.\n\n"
+            "If one call is sitting half-finished at {company_name}, you can send the rough notes here and I will look at it:\n"
+            "{notes_url}\n\n"
             "Sample:\n"
             "{sample_url}\n\n"
-            "Is that cleanup painful enough at {company_name} to test on one real call, or not really?\n\n"
+            "Worth testing on one real call, or not really?\n\n"
             "- Alan"
         ),
         delay_after_prev_days=0,
     ),
     StepTemplate(
         step_number=2,
-        subject="re: client call recaps",
+        subject="re: client call follow-up",
         body=(
             "Following up once.\n\n"
             "The useful part is not more software. It is getting the post-call cleanup finished when the team is busy.\n\n"
-            "If you have one messy call from this week, I can turn it into a polished handoff as a $40 test.\n\n"
+            "Relay can work from rough bullets, a transcript, or an ugly notes dump. The low-friction test is to send one real call here:\n"
+            "{notes_url}\n\n"
+            "If it is a fit, I can turn it around as a paid $40 packet.\n\n"
             "Worth doing, or should I close the loop?\n\n"
             "- Alan"
         ),
@@ -117,11 +121,13 @@ OPTIMIZED_STEP_TEMPLATES = [
     ),
     StepTemplate(
         step_number=3,
-        subject="re: client call recaps",
+        subject="re: client call follow-up",
         body=(
             "Last note from me.\n\n"
             "If after-call cleanup is not a real bottleneck, no worries.\n\n"
-            "If one call is worth testing, the $40 checkout is here:\n"
+            "If one call is worth testing, send the messy notes here:\n"
+            "{notes_url}\n\n"
+            "Or start the $40 paid packet directly here:\n"
             "{packet_checkout_url}\n\n"
             "Either way, this is my last email unless you reply.\n\n"
             "- Alan"
@@ -193,6 +199,10 @@ def _landing_page_url() -> str:
 
 def _sample_url() -> str:
     return _landing_page_url().rstrip("/") + "/sample.pdf"
+
+
+def _notes_url() -> str:
+    return _landing_page_url().rstrip("/") + "/#send-notes"
 
 
 def _email_parts(email_address: str) -> tuple[str, str]:
@@ -341,6 +351,7 @@ def _render_body(template: StepTemplate, prospect: AcquisitionProspect) -> str:
         packet_checkout_url=settings.packet_checkout_url,
         landing_page_url=_landing_page_url(),
         sample_url=_sample_url(),
+        notes_url=_notes_url(),
     )
     return body.strip()
 
@@ -536,6 +547,12 @@ def optimized_outreach_status() -> dict[str, Any]:
     status["queued_count"] = quality["sendable_due_count"]
     status["generic_send_policy"] = _generic_policy()
     status["quality_mode"] = "direct decision-maker inboxes first; placeholder and generic inboxes blocked from normal sends"
+    status["autonomous_mode"] = (
+        "refill direct buyer leads, send only inside the cold-send window, "
+        "poll replies, and close through the notes-first test path"
+    )
+    status["notes_intake_url"] = _notes_url()
+    status["paid_packet_url_configured"] = bool(settings.packet_checkout_url)
     status["next_money_move"] = _next_money_move(status)
     return status
 
@@ -760,7 +777,7 @@ def optimized_run_custom_outreach_cycle() -> dict[str, Any]:
     return {
         "send_result": send_result,
         "reply_result": reply_result,
-        "status": optimized_outreach_status(),
+        "status": outreach.outreach_status(),
     }
 
 
@@ -768,9 +785,11 @@ def _zero_touch_close_reply() -> str:
     return (
         "Yes - here is the sample packet:\n"
         f"{_sample_url()}\n\n"
-        "The simple paid test is one real call for $40:\n"
+        "The easiest next step is to send one messy call note here:\n"
+        f"{_notes_url()}\n\n"
+        "If you want the paid priority test now, the one-call packet is $40:\n"
         f"{settings.packet_checkout_url}\n\n"
-        "After checkout, send one messy call note or recording link. I will turn it into the recap, follow-up draft, open questions, and CRM-ready update.\n\n"
+        "I will turn it into the recap, follow-up draft, open questions, and CRM-ready update.\n\n"
         "- Alan"
     )
 
@@ -965,15 +984,20 @@ def apply_relay_money_optimizer_patch() -> None:
     acq.import_from_apollo_people_search = optimized_import_from_apollo_people_search
     acq_route.import_from_apollo_people_search = optimized_import_from_apollo_people_search
     ops.import_from_apollo_people_search = optimized_import_from_apollo_people_search
+    ops.run_custom_outreach_cycle = optimized_run_custom_outreach_cycle
+    ops.outreach_status = optimized_outreach_status
 
     outreach.STEP_TEMPLATES = OPTIMIZED_STEP_TEMPLATES
     outreach.STEP_TEMPLATE_VARIANTS = {
         **(getattr(outreach, "STEP_TEMPLATE_VARIANTS", {}) or {}),
         "control_sample_ask": OPTIMIZED_STEP_TEMPLATES,
         "sample_first_plain": OPTIMIZED_STEP_TEMPLATES,
+        "pain_owner_direct": OPTIMIZED_STEP_TEMPLATES,
+        "paid_test_explicit": OPTIMIZED_STEP_TEMPLATES,
     }
     outreach._landing_page_url = _landing_page_url
     outreach._sample_url = _sample_url
+    outreach._notes_url = _notes_url
     outreach._render_body = _render_body
     outreach._auto_reply_text = optimized_auto_reply_text
     outreach.send_due_sequence_messages = optimized_send_due_sequence_messages

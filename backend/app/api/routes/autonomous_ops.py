@@ -17,6 +17,13 @@ from app.services.autonomous_ops import (
 router = APIRouter()
 
 
+def _body_bool(body: dict, key: str, default: bool) -> bool:
+    value = body.get(key, default)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 @router.get("/status")
 async def autonomous_status(_: None = Depends(require_relay_admin)) -> dict:
     return ops_status()
@@ -50,11 +57,16 @@ def autonomous_run(
     _: None = Depends(require_relay_admin),
 ) -> dict:
     force_query = body.get("q_keywords")
-    send_live = body.get("send_live", True)
-    notify = body.get("notify", True)
+    send_live = _body_bool(body, "send_live", True)
+    notify = _body_bool(body, "notify", True)
 
     background_tasks.add_task(_run_sync, force_query, send_live, notify)
-    return {"status": "accepted", "summary": "autonomous cycle queued"}
+    return {
+        "status": "accepted",
+        "summary": "autonomous cycle queued",
+        "send_live": send_live,
+        "notify": notify,
+    }
 
 
 @router.post("/send-daily-summary")

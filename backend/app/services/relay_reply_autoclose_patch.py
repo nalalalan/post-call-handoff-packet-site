@@ -193,11 +193,13 @@ def apply_relay_reply_autoclose_patch() -> None:
         return
 
     import app.api.routes.custom_outreach as outreach_route
+    import app.services.autonomous_ops as ops
     import app.services.custom_outreach as outreach
 
     _original_outreach_status = outreach.outreach_status
     outreach.poll_reply_mailbox = optimized_poll_reply_mailbox
     outreach.outreach_status = optimized_outreach_status
+    ops.outreach_status = optimized_outreach_status
     outreach_route.poll_reply_mailbox = optimized_poll_reply_mailbox
     outreach_route.outreach_status = optimized_outreach_status
 

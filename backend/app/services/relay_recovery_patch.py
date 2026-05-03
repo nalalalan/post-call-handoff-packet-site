@@ -5,9 +5,10 @@ import os
 from typing import Any, Dict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy import func, select
 
+from app.api.admin_auth import require_relay_admin
 from app.core.config import settings
 from app.db.base import SessionLocal
 from app.integrations.apollo import ApolloClient
@@ -525,7 +526,11 @@ async def import_from_apollo_search(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.post("/apollo-people-search")
-def apollo_people_search(body: dict, background_tasks: BackgroundTasks) -> dict:
+def apollo_people_search(
+    body: dict,
+    background_tasks: BackgroundTasks,
+    _: None = Depends(require_relay_admin),
+) -> dict:
     background_tasks.add_task(_run_apollo_people_search, body)
     return {"status": "accepted"}
 
@@ -538,12 +543,15 @@ def _run_apollo_people_search(body: dict) -> None:
 
 
 @router.get("/money-loop-status")
-def money_loop_status() -> dict:
+def money_loop_status(_: None = Depends(require_relay_admin)) -> dict:
     return dict(_money_loop_state)
 
 
 @router.post("/money-kick")
-async def money_kick(body: dict[str, Any] | None = None) -> dict[str, Any]:
+async def money_kick(
+    body: dict[str, Any] | None = None,
+    _: None = Depends(require_relay_admin),
+) -> dict[str, Any]:
     body = body or {}
     result = await _relay_money_loop_tick(
         force_refill=_body_bool(body, "force_refill", True),
@@ -572,7 +580,7 @@ async def _relay_money_loop_tick(
     import app.services.autonomous_ops as ops
     import app.services.custom_outreach as outreach
 
-    status = _patched_outreach_status()
+    status = outreach.outreach_status()
     direct_due = int(status.get("direct_due_count") or 0)
     cap_remaining = int(status.get("cap_remaining") or 0)
     min_direct_due = int(os.getenv("AO_RELAY_MIN_DIRECT_DUE", str(max(settings.buyer_acq_daily_send_cap, 10))) or 10)
@@ -620,7 +628,7 @@ async def _relay_money_loop_tick(
         outreach_result = {
             "status": "skipped",
             "reason": "send_live_false",
-            "snapshot": _compact_status_for_loop(_patched_outreach_status()),
+            "snapshot": _compact_status_for_loop(outreach.outreach_status()),
         }
     return {
         "refill_result": refill_result,
@@ -629,7 +637,7 @@ async def _relay_money_loop_tick(
         "cap_remaining_before": cap_remaining,
         "force_refill": force_refill,
         "send_live": send_live,
-        "status_after": _compact_status_for_loop(_patched_outreach_status()),
+        "status_after": _compact_status_for_loop(outreach.outreach_status()),
     }
 
 

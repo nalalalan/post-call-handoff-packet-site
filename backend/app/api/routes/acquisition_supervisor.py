@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, BackgroundTasks, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
+from app.api.admin_auth import require_relay_admin
 from app.services.acquisition_supervisor import (
     acquisition_digest,
     handle_intake_webhook,
@@ -18,24 +19,36 @@ router = APIRouter()
 
 
 @router.get("/digest")
-async def supervisor_digest() -> dict:
+async def supervisor_digest(_: None = Depends(require_relay_admin)) -> dict:
     return acquisition_digest()
 
 
 @router.post("/apollo-search")
-def apollo_search(body: dict, background_tasks: BackgroundTasks) -> dict:
+def apollo_search(
+    body: dict,
+    background_tasks: BackgroundTasks,
+    _: None = Depends(require_relay_admin),
+) -> dict:
     background_tasks.add_task(run_apollo_search, body)
     return {"status": "accepted"}
 
 
 @router.post("/apollo-people-search")
-def apollo_people_search(body: dict, background_tasks: BackgroundTasks) -> dict:
+def apollo_people_search(
+    body: dict,
+    background_tasks: BackgroundTasks,
+    _: None = Depends(require_relay_admin),
+) -> dict:
     background_tasks.add_task(run_apollo_people_search, body)
     return {"status": "accepted"}
 
 
 @router.post("/tick")
-def tick(body: dict, background_tasks: BackgroundTasks) -> dict:
+def tick(
+    body: dict,
+    background_tasks: BackgroundTasks,
+    _: None = Depends(require_relay_admin),
+) -> dict:
     background_tasks.add_task(run_tick, body)
     return {"status": "accepted"}
 

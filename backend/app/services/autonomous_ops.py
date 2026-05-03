@@ -286,6 +286,7 @@ async def run_autonomous_cycle(
 ) -> dict[str, Any]:
     started_at = datetime.utcnow().isoformat()
     query = force_query or choose_query()
+    effective_send_live = settings.acq_auto_send if send_live is None else bool(send_live)
     errors: list[str] = []
 
     try:
@@ -304,7 +305,15 @@ async def run_autonomous_cycle(
         errors.append(f"enrich_error: {exc}")
 
     try:
-        outreach_result = run_custom_outreach_cycle()
+        if effective_send_live:
+            outreach_result = run_custom_outreach_cycle()
+        else:
+            outreach_result = {
+                "status": "skipped",
+                "summary": "send_live_false",
+                "send_live": False,
+                "snapshot": outreach_status(),
+            }
     except Exception as exc:
         outreach_result = {"status": "error", "summary": str(exc)}
         errors.append(f"custom_outreach_error: {exc}")
@@ -343,6 +352,7 @@ async def run_autonomous_cycle(
         "outreach_digest": outreach_digest,
         "performance_review": performance_review,
         "errors": errors,
+        "send_live": effective_send_live,
         "started_at": started_at,
         "finished_at": datetime.utcnow().isoformat(),
     }
@@ -374,6 +384,7 @@ async def run_autonomous_cycle(
         "performance_review": performance_review,
         "alerts_sent": alerts_sent,
         "errors": errors,
+        "send_live": effective_send_live,
         "started_at": started_at,
         "finished_at": current_state["finished_at"],
     }
