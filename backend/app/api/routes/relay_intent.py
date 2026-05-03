@@ -554,6 +554,30 @@ def _window_execution_state(
     return "waiting_for_window"
 
 
+def _launch_readiness_state(
+    *,
+    blockers: list[str],
+    active_remaining: int,
+    active_due: int,
+    cap_remaining: int,
+    expected_next_window_sends: int,
+    window_execution_state: str,
+) -> tuple[str, str]:
+    if blockers:
+        return "blocked", "; ".join(blockers)
+    if active_remaining <= 0:
+        return "sample_ready_for_review", "active sample is complete and ready for the keep-or-rotate decision"
+    if expected_next_window_sends > 0 and window_execution_state == "window_open":
+        return "ready_sending_now", "send window is open with queued active leads and capacity"
+    if expected_next_window_sends > 0:
+        return "ready_waiting_for_window", "queued active leads and capacity are ready for the next send window"
+    if active_due <= 0:
+        return "needs_active_leads", "active experiment needs more queued first-touch leads"
+    if cap_remaining <= 0:
+        return "waiting_for_capacity", "daily send capacity is exhausted"
+    return "needs_send_window_capacity", "send window capacity is not available yet"
+
+
 def _operator_mode(
     *,
     state: str,
@@ -737,8 +761,19 @@ def _launch_readiness_contract(
     else:
         window_execution_failure_condition = "interrupt if the loop cannot create queued active leads or send capacity"
 
+    readiness_state, readiness_reason = _launch_readiness_state(
+        blockers=blockers,
+        active_remaining=active_remaining,
+        active_due=active_due,
+        cap_remaining=cap_remaining,
+        expected_next_window_sends=expected_next_window_sends,
+        window_execution_state=window_execution_state,
+    )
+
     return {
         "ready": not blockers,
+        "readiness_state": readiness_state,
+        "readiness_reason": readiness_reason,
         "blockers": blockers,
         "phase": experiment_decision_state,
         "proof_target": proof_target,
@@ -2028,6 +2063,8 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
                 "active_experiment_sends_remaining": active_remaining,
                 "active_experiment_signal_window": performance.get("active_experiment_signal_window") or {},
                 "expected_next_window_sends": launch_readiness.get("expected_next_window_sends"),
+                "readiness_state": launch_readiness.get("readiness_state"),
+                "readiness_reason": launch_readiness.get("readiness_reason"),
                 "expected_progress_after_next_window": launch_readiness.get("expected_progress_after_next_window"),
                 "next_window_success_criterion": launch_readiness.get("next_window_success_criterion"),
                 "next_window_audit_at": launch_readiness.get("next_window_audit_at"),
