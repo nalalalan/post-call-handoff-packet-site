@@ -1096,6 +1096,17 @@ def _zero_touch_close_reply() -> str:
 
 
 def optimized_auto_reply_text(reply_text: str) -> tuple[str, str | None]:
+    try:
+        from app.services.hot_reply_closer import build_hot_reply_decision
+
+        decision = build_hot_reply_decision(reply_text)
+        if decision.intent == "negative":
+            return "negative", None
+        if decision.reply_text:
+            return decision.intent, decision.reply_text
+    except Exception:
+        pass
+
     text = (reply_text or "").lower()
     if any(term in text for term in ["unsubscribe", "remove me", "not interested", "no thanks", "stop", "wrong person"]):
         return "negative", None

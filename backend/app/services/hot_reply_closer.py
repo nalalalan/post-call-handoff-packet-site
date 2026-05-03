@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Literal
 
@@ -32,15 +33,18 @@ class HotReplyDecision:
 
 def _ladder_block() -> str:
     packet = settings.packet_checkout_url
-    five = getattr(settings, "packet_5_pack_url", "") or packet
-    week = getattr(settings, "weekly_sprint_url", "") or five
-    month = getattr(settings, "monthly_autopilot_url", "") or week
-    return (
-        f"one live packet ($40):\n{packet}\n\n"
-        f"5-call sprint ($750):\n{five}\n\n"
-        f"done-for-you week ($3000):\n{week}\n\n"
-        f"done-for-you month ($7500):\n{month}"
-    )
+    offers = [("one live packet ($40)", packet)]
+    seen = {packet}
+    candidates = [
+        ("5-call sprint ($750)", os.getenv("PACKET_5_PACK_URL", "").strip()),
+        ("done-for-you week ($3000)", os.getenv("WEEKLY_SPRINT_URL", "").strip()),
+        ("done-for-you month ($7500)", os.getenv("MONTHLY_AUTOPILOT_URL", "").strip()),
+    ]
+    for label, url in candidates:
+        if url and url not in seen:
+            offers.append((label, url))
+            seen.add(url)
+    return "\n\n".join(f"{label}:\n{url}" for label, url in offers)
 
 
 def build_hot_reply_decision(text: str) -> HotReplyDecision:
