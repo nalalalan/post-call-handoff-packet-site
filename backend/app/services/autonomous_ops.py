@@ -33,6 +33,10 @@ from app.services.relay_performance import (
     maybe_run_weekly_performance_review,
     relay_performance_status,
 )
+from app.services.relay_success_controller import (
+    relay_success_status,
+    run_relay_success_control_tick,
+)
 
 
 @dataclass
@@ -334,6 +338,12 @@ async def run_autonomous_cycle(
         upsell_result = {"status": "error", "sent_count": 0, "error": str(exc)}
         errors.append(f"upsell_error: {exc}")
 
+    try:
+        success_control = run_relay_success_control_tick()
+    except Exception as exc:
+        success_control = {"status": "error", "summary": str(exc)}
+        errors.append(f"success_control_error: {exc}")
+
     outreach_digest = outreach_status()
 
     try:
@@ -349,6 +359,7 @@ async def run_autonomous_cycle(
         "outreach_result": outreach_result,
         "reminders_result": reminders_result,
         "upsell_result": upsell_result,
+        "success_control": success_control,
         "outreach_digest": outreach_digest,
         "performance_review": performance_review,
         "errors": errors,
@@ -380,6 +391,7 @@ async def run_autonomous_cycle(
         "outreach_result": outreach_result,
         "reminders_result": reminders_result,
         "upsell_result": upsell_result,
+        "success_control": success_control,
         "outreach_digest": outreach_digest,
         "performance_review": performance_review,
         "alerts_sent": alerts_sent,
@@ -398,6 +410,7 @@ def ops_status() -> dict[str, Any]:
         "latest_cycle": latest,
         "outreach_digest": outreach_status(),
         "relay_performance": relay_performance_status(),
+        "relay_success": relay_success_status(),
         "query_rotation": _queries(),
     }
 

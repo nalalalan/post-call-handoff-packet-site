@@ -13,6 +13,7 @@ from app.services.autonomous_ops import (
     run_autonomous_cycle,
     send_daily_money_summary,
 )
+from app.services.relay_success_controller import relay_success_status, run_relay_success_control_tick
 
 router = APIRouter()
 
@@ -32,6 +33,16 @@ async def autonomous_status(_: None = Depends(require_relay_admin)) -> dict:
 @router.get("/money-summary")
 async def autonomous_money_summary(_: None = Depends(require_relay_admin)) -> dict:
     return money_summary()
+
+
+@router.get("/success")
+async def autonomous_success(_: None = Depends(require_relay_admin)) -> dict:
+    return relay_success_status()
+
+
+@router.post("/success-tick")
+def autonomous_success_tick(_: None = Depends(require_relay_admin)) -> dict:
+    return run_relay_success_control_tick()
 
 
 @router.get("/daily-series")

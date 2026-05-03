@@ -378,9 +378,9 @@ def _ready_label(checks: dict[str, Any]) -> str:
     recent = checks.get("recent", {})
     if not recent.get("last_stripe_event"):
         return "needs_stripe_live_test"
-    if not recent.get("last_tally_event"):
+    if not recent.get("last_tally_event") and not recent.get("last_paid_relay_notes_fulfillment"):
         return "needs_intake_live_test"
-    if not recent.get("last_delivery_or_sent_action"):
+    if not recent.get("last_delivery_or_sent_action") and not recent.get("last_paid_relay_notes_fulfillment"):
         return "needs_delivery_live_test"
     return "ready_or_nearly_ready"
 
@@ -657,6 +657,10 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
             "last_stripe_event": _latest_acquisition_event(db, "stripe"),
             "last_tally_event": _latest_acquisition_event(db, "intake"),
             "last_payment_or_paid_prospect": _latest_acquisition_event(db, "paid"),
+            "last_success_control_tick": _latest_acquisition_event(db, "relay_success_control_tick"),
+            "last_inbound_followup": _latest_acquisition_event(db, "autopilot_messy_notes_checkout_followup_sent")
+            or _latest_acquisition_event(db, "autopilot_sample_notes_followup_sent"),
+            "last_paid_relay_notes_fulfillment": _latest_acquisition_event(db, "autopilot_paid_relay_notes_fulfilled"),
             "last_production_transition": _latest_production_transition(db),
             "last_delivery_or_sent_action": _latest_action(db, "delivery") or _latest_action(db, "send") or _latest_action(db, "email"),
             "last_relay_intent_lead": _latest_lead(db),
