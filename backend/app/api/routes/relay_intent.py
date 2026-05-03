@@ -755,6 +755,8 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
             "last_tally_event": _latest_acquisition_event(db, "intake"),
             "last_payment_or_paid_prospect": _latest_acquisition_event(db, "paid"),
             "last_success_control_tick": _latest_acquisition_event(db, "relay_success_control_tick"),
+            "last_money_loop_tick": _latest_acquisition_event(db, "relay_money_loop_tick"),
+            "last_outbound_experiment_plan": _latest_acquisition_event(db, "relay_experiment_plan"),
             "last_inbound_followup": _latest_acquisition_event(db, "autopilot_messy_notes_checkout_followup_sent")
             or _latest_acquisition_event(db, "autopilot_messy_notes_second_followup_sent")
             or _latest_acquisition_event(db, "autopilot_sample_notes_followup_sent")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from typing import Any, Dict
 from datetime import datetime, timezone
@@ -247,6 +248,27 @@ def _compact_outreach_result(result: Any) -> Any:
     if isinstance(compact.get("status"), dict):
         compact["status"] = _compact_status_for_loop(compact["status"])
     return compact
+
+
+def _log_money_loop_tick(result: dict[str, Any]) -> None:
+    try:
+        summary = (
+            f"refill={result.get('refill_result', {}).get('status', 'unknown')} "
+            f"outreach={result.get('outreach_result', {}).get('status', 'unknown')} "
+            f"success={result.get('success_control', {}).get('status', 'unknown')}"
+        )
+        with SessionLocal() as session:
+            session.add(
+                AcquisitionEvent(
+                    event_type="relay_money_loop_tick",
+                    prospect_external_id="relay-money-loop",
+                    summary=summary[:500],
+                    payload_json=json.dumps(result, ensure_ascii=False),
+                )
+            )
+            session.commit()
+    except Exception as exc:
+        _money_loop_state["last_error"] = f"money_loop_log_failed: {exc}"
 
 
 def _quality_snapshot(session) -> dict[str, Any]:
@@ -585,6 +607,23 @@ async def _relay_money_loop_tick(
     cap_remaining = int(status.get("cap_remaining") or 0)
     min_direct_due = int(os.getenv("AO_RELAY_MIN_DIRECT_DUE", str(max(settings.buyer_acq_daily_send_cap, 10))) or 10)
 
+    if send_live:
+        try:
+            from app.services.relay_success_controller import run_relay_success_control_tick
+
+            success_control = await asyncio.to_thread(run_relay_success_control_tick)
+        except Exception as exc:
+            success_control = {
+                "status": "error",
+                "reason": "success_control_failed",
+                "error": str(exc),
+            }
+    else:
+        success_control = {
+            "status": "skipped",
+            "reason": "send_live_false",
+        }
+
     refill_result: dict[str, Any] = {"status": "skipped", "reason": "direct_due_ok"}
     if not settings.apollo_api_key:
         refill_result = {"status": "skipped", "reason": "missing_apollo_api_key"}
@@ -624,36 +663,25 @@ async def _relay_money_loop_tick(
 
     if send_live:
         outreach_result = _compact_outreach_result(await asyncio.to_thread(outreach.run_custom_outreach_cycle))
-        try:
-            from app.services.relay_success_controller import run_relay_success_control_tick
-
-            success_control = await asyncio.to_thread(run_relay_success_control_tick)
-        except Exception as exc:
-            success_control = {
-                "status": "error",
-                "reason": "success_control_failed",
-                "error": str(exc),
-            }
     else:
         outreach_result = {
             "status": "skipped",
             "reason": "send_live_false",
             "snapshot": _compact_status_for_loop(outreach.outreach_status()),
         }
-        success_control = {
-            "status": "skipped",
-            "reason": "send_live_false",
-        }
-    return {
+    result = {
         "refill_result": refill_result,
         "outreach_result": outreach_result,
         "success_control": success_control,
+        "success_control_phase": "before_refill",
         "direct_due_before": direct_due,
         "cap_remaining_before": cap_remaining,
         "force_refill": force_refill,
         "send_live": send_live,
         "status_after": _compact_status_for_loop(outreach.outreach_status()),
     }
+    _log_money_loop_tick(result)
+    return result
 
 
 async def _relay_money_loop() -> None:
