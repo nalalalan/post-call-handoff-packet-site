@@ -1512,6 +1512,13 @@ def _money_loop_sleep_seconds(result: dict[str, Any] | None, default_interval: i
     if window_open and direct_due > 0 and cap_remaining > 0:
         return min(default_interval, 120), "active_send_window"
 
+    sent_today = int(status_after.get("sent_today") or 0)
+    if sent_today > 0:
+        replies_today = int(status_after.get("replies_today") or 0)
+        if replies_today > 0:
+            return min(default_interval, 120), "fresh_reply_watch"
+        return min(default_interval, 300), "fresh_outbound_reply_watch"
+
     if bool(status_after.get("active_experiment_needs_sample")):
         active_due = int(status_after.get("active_experiment_new_due_count") or 0)
         active_target = int(status_after.get("active_experiment_sample_target") or 0)
