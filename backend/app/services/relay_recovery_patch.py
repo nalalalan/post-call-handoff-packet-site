@@ -788,6 +788,49 @@ def _rotate_query_candidates(candidates: list[str], *, page_size: int) -> list[s
     return candidates[offset:] + candidates[:offset]
 
 
+def _recent_apify_fallback_queries(limit: int = 8) -> list[str]:
+    queries: list[str] = []
+    try:
+        with SessionLocal() as session:
+            rows = list(
+                session.execute(
+                    select(AcquisitionEvent.payload_json)
+                    .where(AcquisitionEvent.event_type == "relay_money_loop_tick")
+                    .order_by(AcquisitionEvent.created_at.desc())
+                    .limit(limit)
+                ).scalars().all()
+            )
+    except Exception:
+        return queries
+
+    def add(value: Any) -> None:
+        text = str(value or "").strip()
+        if text and text not in queries:
+            queries.append(text)
+
+    for raw in rows:
+        try:
+            payload = json.loads(raw or "{}")
+        except Exception:
+            payload = {}
+        refill = payload.get("refill_result") if isinstance(payload.get("refill_result"), dict) else {}
+        fallback = refill.get("fallback_result") if isinstance(refill.get("fallback_result"), dict) else {}
+        add(fallback.get("q_keywords"))
+        attempts = refill.get("fallback_attempts")
+        if isinstance(attempts, list):
+            for attempt in attempts:
+                if isinstance(attempt, dict):
+                    add(attempt.get("q_keywords"))
+    return queries
+
+
+def _deprioritize_recent_queries(candidates: list[str], recent_queries: list[str]) -> list[str]:
+    recent = {query.strip().lower() for query in recent_queries if query.strip()}
+    fresh = [query for query in candidates if query.strip().lower() not in recent]
+    stale = [query for query in candidates if query.strip().lower() in recent]
+    return fresh + stale
+
+
 def _compact_refill_attempt(result: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": result.get("status"),
@@ -1290,6 +1333,10 @@ async def _relay_money_loop_tick(
                 fallback_queries = _rotate_query_candidates(
                     _apify_refill_query_candidates(query),
                     page_size=fallback_limit,
+                )
+                fallback_queries = _deprioritize_recent_queries(
+                    fallback_queries,
+                    _recent_apify_fallback_queries(),
                 )
                 for fallback_query in fallback_queries[:fallback_limit]:
                     previous_refill_status = latest_refill_status
