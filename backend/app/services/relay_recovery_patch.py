@@ -235,6 +235,11 @@ def _compact_status_for_loop(status: dict[str, Any]) -> dict[str, Any]:
         "total_sends_all_time",
         "next_money_move",
         "money_target",
+        "active_experiment_variant",
+        "active_experiment_sends",
+        "active_experiment_sample_target",
+        "active_experiment_needs_sample",
+        "active_experiment_new_due_count",
         "blocked_bad_email_count",
         "reply_autoclose_mode",
     ]
@@ -618,6 +623,9 @@ async def _relay_money_loop_tick(
 
     status = outreach.outreach_status()
     direct_due = int(status.get("direct_due_count") or 0)
+    active_experiment_needs_sample = bool(status.get("active_experiment_needs_sample"))
+    active_experiment_new_due = int(status.get("active_experiment_new_due_count") or 0)
+    refill_due = active_experiment_new_due if active_experiment_needs_sample else direct_due
     cap_remaining = int(status.get("cap_remaining") or 0)
     min_direct_due = int(os.getenv("AO_RELAY_MIN_DIRECT_DUE", str(max(settings.buyer_acq_daily_send_cap, 10))) or 10)
 
@@ -641,7 +649,7 @@ async def _relay_money_loop_tick(
     refill_result: dict[str, Any] = {"status": "skipped", "reason": "direct_due_ok"}
     if not settings.apollo_api_key:
         refill_result = {"status": "skipped", "reason": "missing_apollo_api_key"}
-    elif force_refill or direct_due < min_direct_due:
+    elif force_refill or refill_due < min_direct_due:
         query = refill_query or ops.choose_query()
         importer = getattr(ops, "import_from_apollo_people_search", import_from_apollo_people_search)
         try:
@@ -689,6 +697,9 @@ async def _relay_money_loop_tick(
         "success_control": success_control,
         "success_control_phase": "before_refill",
         "direct_due_before": direct_due,
+        "active_experiment_needs_sample": active_experiment_needs_sample,
+        "active_experiment_new_due_before": active_experiment_new_due,
+        "refill_due_before": refill_due,
         "cap_remaining_before": cap_remaining,
         "force_refill": force_refill,
         "send_live": send_live,
