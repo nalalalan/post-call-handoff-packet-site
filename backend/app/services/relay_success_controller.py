@@ -12,7 +12,6 @@ from app.core.config import settings
 from app.db.base import SessionLocal
 from app.models.acquisition_supervisor import AcquisitionEvent, AcquisitionProspect
 from app.models.relay_intent import RelayIntentEvent, RelayIntentLead
-from app.services.custom_outreach import outreach_status
 from app.services.post_purchase_autopilot import (
     run_inbound_conversion_sweep,
     run_paid_intake_reminder_sweep,
@@ -423,7 +422,9 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
     now = _now()
     since = now - timedelta(days=days)
     with _session() as session:
-        outreach = outreach_status()
+        import app.services.custom_outreach as outreach_service
+
+        outreach = outreach_service.outreach_status()
         money = _money_metrics(session, since=since)
         internal_sessions = _internal_session_ids(session, since=since)
         page_views = _intent_count(session, "page_view", since=since, exclude_sessions=internal_sessions)
