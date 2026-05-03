@@ -127,7 +127,7 @@ def _apollo_refill_timeout_seconds() -> float:
 
 
 def _apify_fallback_timeout_seconds() -> float:
-    return _env_float("AO_RELAY_APIFY_FALLBACK_TIMEOUT_SECONDS", 180.0)
+    return _env_float("AO_RELAY_APIFY_FALLBACK_TIMEOUT_SECONDS", 90.0)
 
 
 def _refill_timeout_backoff_seconds() -> float:
@@ -689,6 +689,66 @@ def _refill_query_candidates(primary_query: str | None) -> list[str]:
     return candidates[:limit]
 
 
+def _apify_refill_query_candidates(primary_query: str | None) -> list[str]:
+    candidates: list[str] = []
+
+    def add(value: Any) -> None:
+        text = str(value or "").strip()
+        if text and text not in candidates:
+            candidates.append(text)
+
+    def add_category_variants(value: Any) -> None:
+        text = str(value or "").strip().lower()
+        if not text:
+            return
+        if "google ads" in text:
+            add("google ads agency new york")
+            add("google ads agency los angeles")
+            add("google ads agency chicago")
+        elif "ppc" in text:
+            add("ppc agency new york")
+            add("ppc agency los angeles")
+            add("ppc agency denver")
+        elif "performance" in text:
+            add("performance marketing agency new york")
+            add("performance marketing agency austin")
+            add("performance marketing agency chicago")
+        elif "paid media" in text:
+            add("paid media agency new york")
+            add("paid media agency los angeles")
+            add("paid media agency austin")
+        elif "agency" in text:
+            add("digital marketing agency new york")
+            add("b2b marketing agency los angeles")
+            add("client services agency chicago")
+
+    add_category_variants(primary_query)
+    try:
+        from app.services.relay_performance import active_relay_experiment
+
+        experiment = active_relay_experiment()
+        for query in experiment.get("query_rotation", []) or []:
+            add_category_variants(query)
+    except Exception:
+        pass
+    for query in os.getenv("ACQ_OPS_QUERY_ROTATION", "").split("|"):
+        add_category_variants(query)
+    for query in [
+        "paid media agency new york",
+        "paid media agency los angeles",
+        "google ads agency chicago",
+        "ppc agency denver",
+        "performance marketing agency austin",
+        "paid social agency atlanta",
+        "meta ads agency dallas",
+        "b2b marketing agency boston",
+        "ecommerce marketing agency san diego",
+        "digital marketing agency seattle",
+    ]:
+        add(query)
+    return candidates
+
+
 def _compact_refill_attempt(result: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": result.get("status"),
@@ -1182,7 +1242,7 @@ async def _relay_money_loop_tick(
                     fallback_limit = max(int(os.getenv("AO_RELAY_APIFY_FALLBACK_QUERY_ATTEMPTS", "4") or 4), 1)
                 except Exception:
                     fallback_limit = 4
-                for fallback_query in _refill_query_candidates(query)[:fallback_limit]:
+                for fallback_query in _apify_refill_query_candidates(query)[:fallback_limit]:
                     previous_refill_status = latest_refill_status
                     try:
                         apify_timeout = _apify_fallback_timeout_seconds()
