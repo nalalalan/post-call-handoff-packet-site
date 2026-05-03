@@ -2120,6 +2120,7 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
                 "outreach": success_snapshot.get("outreach") or {},
                 "conversion": success_snapshot.get("conversion") or {},
                 "outbound_preflight": success_snapshot.get("outbound_preflight") or {},
+                "public_offer_preflight": success_snapshot.get("public_offer_preflight") or {},
                 "critical_missing": success_snapshot.get("critical_missing") or [],
             }
             money = success_snapshot.get("money") or {}

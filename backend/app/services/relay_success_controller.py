@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -28,6 +29,7 @@ SUCCESS_TICK_EVENT = "relay_success_control_tick"
 INTAKE_SMOKE_EVENT = "relay_intake_smoke_test"
 DELIVERY_SMOKE_EVENT = "relay_delivery_smoke_test"
 OUTBOUND_SMOKE_EVENT = "relay_outbound_smoke_test"
+PUBLIC_OFFER_SMOKE_EVENT = "relay_public_offer_smoke_test"
 EXPERIMENT_PLAN_EVENT = "relay_experiment_plan"
 DEFAULT_EXPERIMENT_VARIANT = "control_sample_ask"
 HARD_PAID_TEST_VARIANT = "hard_paid_test_direct"
@@ -669,6 +671,10 @@ def _outbound_smoke_interval_hours() -> int:
     return max(_int_env("RELAY_OUTBOUND_SMOKE_INTERVAL_HOURS", 6), 1)
 
 
+def _public_offer_smoke_interval_hours() -> int:
+    return max(_int_env("RELAY_PUBLIC_OFFER_SMOKE_INTERVAL_HOURS", 6), 1)
+
+
 def _run_intake_smoke_check_if_needed() -> dict[str, Any]:
     now = _now()
     interval_hours = _intake_smoke_interval_hours()
@@ -832,6 +838,143 @@ def _active_outbound_preflight() -> dict[str, Any]:
         "missing": missing,
         **detail,
     }
+
+
+def _public_offer_preflight() -> dict[str, Any]:
+    now = _now()
+    missing: list[str] = []
+    detail: dict[str, Any] = {
+        "did_not_send_email": True,
+        "did_not_create_payment": True,
+        "did_not_submit_lead": True,
+        "checked_at": now.isoformat(),
+    }
+    try:
+        import app.services.custom_outreach as outreach_service
+
+        urls = _outbound_smoke_urls(outreach_service)
+        landing_page_url = urls["landing_page_url"].rstrip("/") + "/"
+        site_config_url = landing_page_url + "site-config.js"
+        sample_url = urls["sample_url"]
+        checkout_url = urls["packet_checkout_url"]
+        detail.update(
+            {
+                "landing_page_url": landing_page_url,
+                "site_config_url": site_config_url,
+                "sample_url": sample_url,
+                "checkout_configured": bool(checkout_url),
+            }
+        )
+        if not checkout_url:
+            missing.append("PACKET_CHECKOUT_URL")
+
+        timeout = httpx.Timeout(float(os.getenv("RELAY_PUBLIC_OFFER_TIMEOUT_SECONDS", "8") or "8"))
+        headers = {"User-Agent": "RelayRevenueHealth/1.0"}
+        with httpx.Client(timeout=timeout, follow_redirects=True, headers=headers) as client:
+            page_response = client.get(landing_page_url)
+            page_text = page_response.text or ""
+            config_text = ""
+            sample_status = None
+            try:
+                config_response = client.get(site_config_url)
+                detail["site_config_status_code"] = config_response.status_code
+                if config_response.status_code < 400:
+                    config_text = config_response.text or ""
+            except Exception as exc:
+                detail["site_config_error_type"] = type(exc).__name__
+                detail["site_config_error"] = str(exc)[:300]
+            try:
+                sample_response = client.head(sample_url)
+                sample_status = sample_response.status_code
+            except Exception as exc:
+                detail["sample_error_type"] = type(exc).__name__
+                detail["sample_error"] = str(exc)[:300]
+
+        combined_text = page_text + "\n" + config_text
+        page_lower = page_text.lower()
+        detail.update(
+            {
+                "status_code": page_response.status_code,
+                "final_url": str(page_response.url),
+                "body_length": len(page_text),
+                "sample_status_code": sample_status,
+                "contains_notes_form": "notesForm" in page_text or 'id="notes"' in page_text,
+                "contains_lead_api": "/api/relay/lead" in combined_text,
+                "contains_checkout_action": "checkout_click" in page_text or "js-checkout" in page_text,
+                "contains_checkout_url": bool(checkout_url and checkout_url in combined_text),
+                "contains_price": "$40" in page_text,
+                "looks_blocked": "web page blocked" in page_lower or "access to the web page you were trying to visit has been blocked" in page_lower,
+            }
+        )
+        if page_response.status_code >= 400:
+            missing.append("PUBLIC_OFFER_PAGE_HTTP_STATUS")
+        if detail["looks_blocked"]:
+            missing.append("PUBLIC_OFFER_PAGE_BLOCKED")
+        if not detail["contains_notes_form"]:
+            missing.append("PUBLIC_OFFER_NOTES_FORM")
+        if not detail["contains_lead_api"]:
+            missing.append("PUBLIC_OFFER_LEAD_API")
+        if not detail["contains_checkout_action"]:
+            missing.append("PUBLIC_OFFER_CHECKOUT_ACTION")
+        if checkout_url and not detail["contains_checkout_url"]:
+            missing.append("PUBLIC_OFFER_CHECKOUT_URL")
+        if not detail["contains_price"]:
+            missing.append("PUBLIC_OFFER_PRICE_COPY")
+        if sample_status is not None and sample_status >= 400:
+            missing.append("PUBLIC_OFFER_SAMPLE_ASSET")
+    except Exception as exc:
+        missing.append("PUBLIC_OFFER_PREFLIGHT_EXCEPTION")
+        detail["error_type"] = type(exc).__name__
+        detail["error"] = str(exc)[:500]
+
+    missing = sorted(set(missing))
+    return {
+        "status": "ok" if not missing else "error",
+        "summary": "public_offer_path_ok" if not missing else "public_offer_path_missing",
+        "missing": missing,
+        **detail,
+    }
+
+
+def _run_public_offer_smoke_check_if_needed() -> dict[str, Any]:
+    now = _now()
+    interval_hours = _public_offer_smoke_interval_hours()
+    with _session() as session:
+        latest = session.execute(
+            select(AcquisitionEvent)
+            .where(AcquisitionEvent.event_type == PUBLIC_OFFER_SMOKE_EVENT)
+            .order_by(AcquisitionEvent.created_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if latest is not None and latest.created_at is not None:
+            age_seconds = max(int((now - latest.created_at.replace(tzinfo=None)).total_seconds()), 0)
+            latest_payload = _safe_json(latest.payload_json)
+            if latest_payload.get("status") != "error" and age_seconds < interval_hours * 3600:
+                return {
+                    "status": "skipped",
+                    "summary": "recent_public_offer_smoke_check_exists",
+                    "latest_at": latest.created_at.isoformat(),
+                    "age_seconds": age_seconds,
+                    "interval_hours": interval_hours,
+                }
+
+        payload = _public_offer_preflight()
+        session.add(
+            AcquisitionEvent(
+                event_type=PUBLIC_OFFER_SMOKE_EVENT,
+                prospect_external_id="relay-public-offer-smoke",
+                summary=str(payload.get("summary") or "public_offer_smoke_checked"),
+                payload_json=json.dumps(payload, ensure_ascii=False),
+            )
+        )
+        session.commit()
+        return {
+            "status": payload.get("status"),
+            "summary": payload.get("summary"),
+            "missing": payload.get("missing", []),
+            "interval_hours": interval_hours,
+            "landing_page_url": payload.get("landing_page_url", ""),
+        }
 
 
 def _run_outbound_smoke_check_if_needed() -> dict[str, Any]:
@@ -1173,6 +1316,7 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
     window_execution_contract = _outbound_window_execution_contract(outreach)
     env = _env_snapshot()
     outbound_preflight = _active_outbound_preflight()
+    public_offer_preflight = _public_offer_preflight()
     critical_missing = [
         name
         for name in ["DATABASE_URL", "RESEND_API_KEY", "PACKET_CHECKOUT_URL", "FROM_EMAIL_FULFILLMENT"]
@@ -1180,6 +1324,8 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
     ]
     if outbound_preflight.get("status") == "error":
         critical_missing.append("ACTIVE_OUTBOUND_PREFLIGHT")
+    if public_offer_preflight.get("status") == "error":
+        critical_missing.append("PUBLIC_OFFER_PREFLIGHT")
 
     return {
         "status": "ok",
@@ -1188,6 +1334,7 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
         "env": env,
         "critical_missing": critical_missing,
         "outbound_preflight": outbound_preflight,
+        "public_offer_preflight": public_offer_preflight,
         "money": money,
         "intent": {
             "page_views": page_views,
@@ -1788,6 +1935,7 @@ def run_relay_success_control_tick() -> dict[str, Any]:
     actions["intake_smoke_check"] = _run_intake_smoke_check_if_needed()
     actions["delivery_smoke_check"] = _run_delivery_smoke_check_if_needed()
     actions["outbound_smoke_check"] = _run_outbound_smoke_check_if_needed()
+    actions["public_offer_smoke_check"] = _run_public_offer_smoke_check_if_needed()
     actions["inbound_conversion"] = run_inbound_conversion_sweep()
     actions["paid_intake_reminders"] = run_paid_intake_reminder_sweep(
         hours=int(os.getenv("OPS_INTAKE_REMINDER_HOURS", "12") or "12")
