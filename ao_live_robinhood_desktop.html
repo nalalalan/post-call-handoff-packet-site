@@ -563,7 +563,7 @@
             <div class="v" id="todayReplies">0</div>
           </div>
           <div class="readout">
-            <div class="k">Send rhythm</div>
+            <div class="k">Operator mode</div>
             <div class="v" id="sendRhythm">Locked</div>
           </div>
         </div>
@@ -690,6 +690,7 @@
     const STATUS_URL = "https://alan-operator-backend-production.up.railway.app/custom-outreach/status";
     const MONEY_URL = "https://alan-operator-backend-production.up.railway.app/ops/money-summary";
     const SERIES_URL = "https://alan-operator-backend-production.up.railway.app/ops/daily-series?days=21";
+    const OPS_CHECK_URL = "https://alan-operator-backend-production.up.railway.app/api/relay/ops-check?days=30";
     const ADMIN_TOKEN_KEY = "relay_admin_token";
     let refreshTimer = null;
 
@@ -753,6 +754,17 @@
       const hours = Math.round(minutes / 60);
       if (hours < 24) return `${hours}h ago`;
       return `${Math.round(hours / 24)}d ago`;
+    }
+
+    function fmtMoment(value) {
+      if (!value) return "";
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return String(value);
+      return d.toLocaleString([], {
+        weekday: "short",
+        hour: "numeric",
+        minute: "2-digit"
+      });
     }
 
     function escapeHtml(value) {
@@ -833,6 +845,47 @@
 
       const nextTick = label === "Moving" ? nextBoundary(5, now) : nextOpen;
       return { label, reason, nextOpen, nextClose, nextTick, win };
+    }
+
+    function operatorState(ops, status, rhythm) {
+      const moneySystem = ops?.money_system || {};
+      const op = moneySystem.operator_mode || {};
+      const mode = String(op.mode || "");
+      const doNotInterrupt = op.do_not_interrupt_user === true;
+      const reason = String(op.reason || "");
+      const nextWindow = moneySystem.next_autonomous_window || status.send_window_next_open_local || "";
+
+      if (mode) {
+        return {
+          label: doNotInterrupt ? "Stay out" : "Attention",
+          reason: reason || (doNotInterrupt ? "Relay is operating without a useful human move." : "Relay found a signal worth handling."),
+          mode,
+          doNotInterrupt,
+          nextWindow,
+          activeProgress: moneySystem.active_experiment_progress || ""
+        };
+      }
+
+      const replies = Number(status.replies_today || 0);
+      const due = Number(status.due_now_count || 0);
+      if (replies > 0) {
+        return {
+          label: "Attention",
+          reason: "Fresh reply signal is worth reading before changing anything.",
+          mode: "reply_signal",
+          doNotInterrupt: false,
+          nextWindow,
+          activeProgress: ""
+        };
+      }
+      return {
+        label: "Stay out",
+        reason: due > 0 ? `Queued leads are ready. Relay is ${rhythm.label.toLowerCase()}.` : "No immediate human action is useful.",
+        mode: "local_read",
+        doNotInterrupt: true,
+        nextWindow,
+        activeProgress: ""
+      };
     }
 
     function dailyRows(payload) {
@@ -957,7 +1010,7 @@
       return { money7, moneyPrev, replies7, repliesPrev, sends7, sendsPrev };
     }
 
-    function renderPattern(status, money, trend, rhythm) {
+    function renderPattern(status, money, trend, rhythm, operator) {
       const replies = Number(status.replies_today || 0);
       const sent = Number(status.sent_today || 0);
       const due = Number(status.due_now_count || 0);
@@ -967,7 +1020,15 @@
       let headline = "Quiet system, easy to read.";
       let copy = "No urgent spike right now. Watch replies first, then money, then whether the queue is building.";
 
-      if (moneyToday > 0) {
+      if (operator?.doNotInterrupt) {
+        headline = "Stay out. Relay is handling it.";
+        const next = fmtMoment(operator.nextWindow);
+        const progress = operator.activeProgress ? ` Active sample: ${operator.activeProgress}.` : "";
+        copy = `${operator.reason}${next ? ` Next autonomous window: ${next}.` : ""}${progress}`;
+      } else if (operator && !operator.doNotInterrupt) {
+        headline = "Attention needed.";
+        copy = operator.reason || "There is a real signal worth handling before the system keeps scaling.";
+      } else if (moneyToday > 0) {
         headline = "Money landed today.";
         copy = `${fmtExactMoney(moneyToday)} came in today. The weekly total is ${fmtMoney(moneyWeek, moneyWeek < 100 ? 2 : 0)}.`;
       } else if (replies > 0) {
@@ -988,26 +1049,32 @@
       $("patternCopy").textContent = copy;
     }
 
-    function render(status, money, seriesPayload) {
+    function render(status, money, seriesPayload, opsPayload) {
       const rows = dailyRows(seriesPayload);
       const rhythm = rhythmState(status);
       const trend = renderTrends(rows);
+      const operator = operatorState(opsPayload, status, rhythm);
 
       $("liveState").textContent = "live";
       $("lastUpdatedPill").textContent = `updated ${fmtTime(new Date())}`;
-      $("marketPill").textContent = `${rhythm.label}: ${rhythm.reason}`;
+      $("marketPill").textContent = `${operator.label}: ${operator.mode}`;
       $("todayMoney").textContent = fmtExactMoney(money.today?.gross_usd || 0);
       $("todayReplies").textContent = String(status.replies_today ?? 0);
-      $("sendRhythm").textContent = rhythm.label;
-      $("rhythmCopy").textContent = rhythm.label === "Moving"
+      $("sendRhythm").textContent = operator.label;
+      $("rhythmCopy").textContent = operator.doNotInterrupt
+        ? operator.reason
+        : "Handle the real signal first. Do not tune volume until that is done.";
+      if (!operator.reason) {
+        $("rhythmCopy").textContent = rhythm.label === "Moving"
         ? "The system can send now. Keep the read focused on reply quality."
         : `The system is ${rhythm.label.toLowerCase()} because ${rhythm.reason}.`;
+      }
 
       $("queueValue").textContent = `${status.due_now_count ?? 0} / ${status.in_sequence_count ?? 0}`;
       $("windowValue").textContent = rhythm.label;
       $("windowSub").textContent = `${fmtTime(rhythm.win.start)} to ${fmtTime(rhythm.win.end)} / ${rhythm.win.tz}`;
-      $("nextTick").textContent = fmtTime(rhythm.nextTick);
-      $("nextTickSub").textContent = rhythm.label === "Moving" ? "next send check" : "next open window";
+      $("nextTick").textContent = fmtMoment(operator.nextWindow) || fmtTime(rhythm.nextTick);
+      $("nextTickSub").textContent = operator.doNotInterrupt ? "next autonomous window" : "human action needed";
       $("capValue").textContent = `${status.sent_today ?? 0} / ${status.daily_send_cap ?? 0}`;
 
       const direct = Number(status.direct_inbox_count || 0);
@@ -1018,7 +1085,7 @@
 
       renderCompactList("recentReplies", status.recent_replies || [], true);
       renderCompactList("recentSends", status.recent_sent || [], false);
-      renderPattern(status, money, trend, rhythm);
+      renderPattern(status, money, trend, rhythm, operator);
     }
 
     async function fetchAll() {
@@ -1044,8 +1111,15 @@
         const status = await statusRes.json();
         const money = await moneyRes.json();
         const series = await seriesRes.json();
+        let ops = null;
+        try {
+          const opsRes = await fetch(OPS_CHECK_URL, { cache: "no-store" });
+          if (opsRes.ok) ops = await opsRes.json();
+        } catch (err) {
+          ops = null;
+        }
         hideAdminGate();
-        render(status, money, series);
+        render(status, money, series, ops);
       } catch (err) {
         $("liveState").textContent = "stale";
         $("lastUpdatedPill").textContent = "fetch failed";
