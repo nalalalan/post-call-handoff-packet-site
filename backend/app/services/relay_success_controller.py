@@ -22,6 +22,7 @@ from app.services.relay_performance import relay_performance_status, run_weekly_
 
 SUCCESS_TICK_EVENT = "relay_success_control_tick"
 INTAKE_SMOKE_EVENT = "relay_intake_smoke_test"
+DELIVERY_SMOKE_EVENT = "relay_delivery_smoke_test"
 
 
 def _session() -> Session:
@@ -419,6 +420,7 @@ def _due_followup_counts(session: Session, *, now: datetime) -> dict[str, int]:
 def _env_snapshot() -> dict[str, bool]:
     return {
         "DATABASE_URL": bool(settings.database_url),
+        "OPENAI_API_KEY": bool(settings.openai_api_key or os.getenv("OPENAI_API_KEY", "").strip()),
         "RESEND_API_KEY": bool(settings.resend_api_key),
         "STRIPE_WEBHOOK_SECRET": bool(settings.stripe_webhook_secret),
         "TALLY_WEBHOOK_SECRET": bool(settings.tally_webhook_secret),
@@ -444,6 +446,10 @@ def _experiment_failure_sample() -> int:
 
 def _intake_smoke_interval_hours() -> int:
     return max(_int_env("RELAY_INTAKE_SMOKE_INTERVAL_HOURS", 24), 1)
+
+
+def _delivery_smoke_interval_hours() -> int:
+    return max(_int_env("RELAY_DELIVERY_SMOKE_INTERVAL_HOURS", 24), 1)
 
 
 def _run_intake_smoke_check_if_needed() -> dict[str, Any]:
@@ -492,6 +498,102 @@ def _run_intake_smoke_check_if_needed() -> dict[str, Any]:
             AcquisitionEvent(
                 event_type=INTAKE_SMOKE_EVENT,
                 prospect_external_id="relay-intake-smoke",
+                summary=summary,
+                payload_json=json.dumps(payload, ensure_ascii=False),
+            )
+        )
+        session.commit()
+        return {
+            "status": status,
+            "summary": summary,
+            "missing": missing,
+            "interval_hours": interval_hours,
+        }
+
+
+def _run_delivery_smoke_check_if_needed() -> dict[str, Any]:
+    now = _now()
+    interval_hours = _delivery_smoke_interval_hours()
+    with _session() as session:
+        latest = session.execute(
+            select(AcquisitionEvent)
+            .where(AcquisitionEvent.event_type == DELIVERY_SMOKE_EVENT)
+            .order_by(AcquisitionEvent.created_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if latest is not None and latest.created_at is not None:
+            age_seconds = max(int((now - latest.created_at.replace(tzinfo=None)).total_seconds()), 0)
+            if age_seconds < interval_hours * 3600:
+                return {
+                    "status": "skipped",
+                    "summary": "recent_delivery_smoke_check_exists",
+                    "latest_at": latest.created_at.isoformat(),
+                    "age_seconds": age_seconds,
+                    "interval_hours": interval_hours,
+                }
+
+        env = _env_snapshot()
+        missing = [
+            name
+            for name in ["OPENAI_API_KEY", "RESEND_API_KEY", "FROM_EMAIL_FULFILLMENT"]
+            if not env.get(name)
+        ]
+        detail: dict[str, Any] = {
+            "did_not_create_payment": True,
+            "did_not_generate_packet": True,
+            "did_not_send_customer_email": True,
+            "checked_at": now.isoformat(),
+        }
+        try:
+            from app.workers import fulfillment
+
+            master_path = fulfillment.MASTER_PATH
+            generate_script = fulfillment.GENERATE_SCRIPT
+            detail["master_path"] = str(master_path)
+            detail["generate_script"] = str(generate_script)
+            detail["master_path_exists"] = master_path.exists()
+            detail["generate_script_exists"] = generate_script.exists()
+            if not master_path.exists():
+                missing.append("FULFILLMENT_MASTER_WORKBOOK")
+            if not generate_script.exists():
+                missing.append("FULFILLMENT_GENERATE_SCRIPT")
+            if master_path.exists():
+                wb = fulfillment.load_workbook(master_path, read_only=True)
+                try:
+                    if "Master Log" not in wb.sheetnames:
+                        missing.append("FULFILLMENT_MASTER_LOG_SHEET")
+                        detail["master_sheet_exists"] = False
+                    else:
+                        ws = wb["Master Log"]
+                        headers = {
+                            str(ws.cell(1, col).value)
+                            for col in range(1, ws.max_column + 1)
+                            if ws.cell(1, col).value
+                        }
+                        missing_headers = [h for h in fulfillment.MASTER_HEADERS if h not in headers]
+                        detail["master_sheet_exists"] = True
+                        detail["missing_master_headers"] = missing_headers
+                        if missing_headers:
+                            missing.append("FULFILLMENT_MASTER_HEADERS")
+                finally:
+                    wb.close()
+        except Exception as exc:
+            missing.append("FULFILLMENT_SMOKE_EXCEPTION")
+            detail["error_type"] = type(exc).__name__
+            detail["error"] = str(exc)[:500]
+
+        missing = sorted(set(missing))
+        status = "ok" if not missing else "error"
+        summary = "delivery_smoke_config_ok" if not missing else "delivery_smoke_missing_config"
+        payload = {
+            "status": status,
+            "missing": missing,
+            **detail,
+        }
+        session.add(
+            AcquisitionEvent(
+                event_type=DELIVERY_SMOKE_EVENT,
+                prospect_external_id="relay-delivery-smoke",
                 summary=summary,
                 payload_json=json.dumps(payload, ensure_ascii=False),
             )
@@ -820,6 +922,7 @@ def run_relay_success_control_tick() -> dict[str, Any]:
 
     actions: dict[str, Any] = {}
     actions["intake_smoke_check"] = _run_intake_smoke_check_if_needed()
+    actions["delivery_smoke_check"] = _run_delivery_smoke_check_if_needed()
     actions["inbound_conversion"] = run_inbound_conversion_sweep()
     actions["paid_intake_reminders"] = run_paid_intake_reminder_sweep(
         hours=int(os.getenv("OPS_INTAKE_REMINDER_HOURS", "12") or "12")

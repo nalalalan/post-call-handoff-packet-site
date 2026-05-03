@@ -638,6 +638,10 @@ def _ready_label(checks: dict[str, Any]) -> str:
         return f"money_loop_unhealthy:{money_loop_status}"
 
     recent = checks.get("recent", {})
+    delivery_smoke = recent.get("last_delivery_smoke_detail")
+    if isinstance(delivery_smoke, dict) and delivery_smoke.get("status") == "error":
+        return "delivery_smoke_unhealthy"
+
     if not recent.get("last_stripe_event"):
         return "needs_stripe_live_test"
     if not recent.get("last_tally_event") and not recent.get("last_paid_relay_notes_fulfillment"):
@@ -988,6 +992,8 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
             "last_stripe_event": _latest_acquisition_event(db, "stripe"),
             "last_tally_event": _latest_acquisition_event(db, "intake_received"),
             "last_intake_smoke_test": _latest_acquisition_event(db, "relay_intake_smoke_test"),
+            "last_delivery_smoke_test": _latest_acquisition_event(db, "relay_delivery_smoke_test"),
+            "last_delivery_smoke_detail": _latest_acquisition_payload(db, "relay_delivery_smoke_test"),
             "last_payment_or_paid_prospect": _latest_acquisition_event(db, "paid"),
             "last_success_control_tick": _latest_acquisition_event(db, "relay_success_control_tick"),
             "last_money_loop_tick": _latest_acquisition_event(db, "relay_money_loop_tick"),
