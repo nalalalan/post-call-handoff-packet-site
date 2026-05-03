@@ -1565,7 +1565,13 @@ def _money_loop_success_sleep(result: dict[str, Any] | None, default_interval: i
         else {}
     )
     success_before = result.get("success_control") if isinstance(result.get("success_control"), dict) else {}
-    bottleneck = str(success_after.get("bottleneck") or success_before.get("bottleneck") or "").strip()
+    bottleneck = str(
+        success_after.get("after_bottleneck")
+        or success_after.get("bottleneck")
+        or success_before.get("after_bottleneck")
+        or success_before.get("bottleneck")
+        or ""
+    ).strip()
     if bottleneck == "paid_fulfillment":
         return min(default_interval, 120), "paid_fulfillment_watch"
     if bottleneck in {"checkout_to_payment", "reply_to_payment"}:

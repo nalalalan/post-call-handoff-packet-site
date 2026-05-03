@@ -1141,10 +1141,14 @@ def run_relay_success_control_tick() -> dict[str, Any]:
     conversion_actions = _conversion_action_summary(actions)
 
     after = relay_success_snapshot(days=7)
+    after_bottleneck = _bottleneck(after)
     result = {
         "status": "ok",
         "bottleneck": bottleneck,
         "next_action": _next_action(bottleneck),
+        "after_bottleneck": after_bottleneck,
+        "after_next_action": _next_action(after_bottleneck),
+        "bottleneck_changed": after_bottleneck != bottleneck,
         "before": before,
         "actions": actions,
         "conversion_actions": conversion_actions,
@@ -1157,7 +1161,7 @@ def run_relay_success_control_tick() -> dict[str, Any]:
             AcquisitionEvent(
                 event_type=SUCCESS_TICK_EVENT,
                 prospect_external_id="relay-success",
-                summary=f"{bottleneck}: {_next_action(bottleneck)}",
+                summary=f"{bottleneck}->{after_bottleneck}: {_next_action(after_bottleneck)}",
                 payload_json=json.dumps(result, ensure_ascii=False),
             )
         )
