@@ -932,6 +932,7 @@
       const conversionLadder = moneySystem.conversion_ladder || {};
       const successGovernor = moneySystem.success_governor || {};
       const ownerAbsenceContract = moneySystem.owner_absence_contract || {};
+      const autonomousMoneyMandate = moneySystem.autonomous_money_mandate || {};
       const blockers = Array.isArray(launch.blockers) ? launch.blockers : [];
 
       if (mode) {
@@ -957,6 +958,7 @@
           conversionLadder,
           successGovernor,
           ownerAbsenceContract,
+          autonomousMoneyMandate,
           planSummary: proofTarget,
           successMetric,
           interruptRule,
@@ -987,6 +989,7 @@
           conversionLadder,
           successGovernor,
           ownerAbsenceContract,
+          autonomousMoneyMandate,
           planSummary: "",
           successMetric: "",
           interruptRule: "",
@@ -1013,6 +1016,7 @@
         conversionLadder,
         successGovernor,
         ownerAbsenceContract,
+        autonomousMoneyMandate,
         planSummary: plan.summary || "",
         successMetric: "",
         interruptRule: "",
@@ -1157,7 +1161,7 @@
       if (operator?.doNotInterrupt) {
         const readableState = stateText(operator.readinessState || operator.mode);
         headline = readableState.includes("ready")
-          ? "Ready. The next move is queued."
+          ? "Ready. The next money move is queued."
           : "Stay out. Relay is handling it.";
         const next = fmtMoment(operator.nextWindow);
         const readiness = sentence(operator.readinessReason || operator.reason || "Relay is operating autonomously");
@@ -1208,8 +1212,9 @@
       $("todayMoney").textContent = fmtExactMoney(money.today?.gross_usd || 0);
       $("todayReplies").textContent = String(status.replies_today ?? 0);
       $("sendRhythm").textContent = operator.label;
+      const mandate = operator.autonomousMoneyMandate || {};
       $("rhythmCopy").textContent = operator.doNotInterrupt
-        ? "No manual move is useful right now. Let the next window run."
+        ? (mandate.primary_action || "No manual move is useful right now. Let the next window run.")
         : "Handle the real signal first. Do not tune volume until that is done.";
       if (!operator.reason) {
         $("rhythmCopy").textContent = rhythm.label === "Moving"

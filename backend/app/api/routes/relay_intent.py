@@ -499,6 +499,91 @@ def _owner_absence_contract(
     }
 
 
+def _autonomous_money_mandate(
+    *,
+    revenue_objective: dict[str, Any],
+    money_decision: dict[str, Any],
+    reply_autonomy: dict[str, Any],
+    conversion_ladder: dict[str, Any],
+    success_governor: dict[str, Any],
+    owner_absence: dict[str, Any],
+    launch_readiness: dict[str, Any],
+) -> dict[str, Any]:
+    governor_state = str(success_governor.get("state") or "").strip()
+    reply_state = str(reply_autonomy.get("state") or "").strip()
+    money_state = str(money_decision.get("state") or "").strip()
+    revenue_state = str(revenue_objective.get("state") or "").strip()
+    ladder_stage = str(conversion_ladder.get("active_stage") or conversion_ladder.get("state") or "").strip()
+    payments = _safe_int(revenue_objective.get("current_week_payments"))
+    gross_usd = round(_safe_float(revenue_objective.get("current_week_gross_usd")), 2)
+    revenue_gap_usd = round(_safe_float(revenue_objective.get("revenue_gap_usd")), 2)
+    weekly_target_usd = round(_safe_float(revenue_objective.get("weekly_target_usd")), 2)
+    active_remaining = _safe_int(launch_readiness.get("active_experiment_sends_remaining"))
+    expected_next_sends = _safe_int(launch_readiness.get("expected_next_window_sends"))
+
+    if revenue_state == "weekly_target_met":
+        state = "protect_winning_lane"
+        primary_action = success_governor.get("next_step") or "fulfill paid buyers and keep the current lane stable"
+    elif governor_state in {"interrupt_required", "fix_execution", "remove_blocker"}:
+        state = "restore_revenue_loop"
+        primary_action = success_governor.get("next_step") or "clear the blocker before judging demand"
+    elif reply_state == "attention_required" or ladder_stage in {"reply", "checkout"}:
+        state = "close_buyer_signal"
+        primary_action = reply_autonomy.get("next_action") or money_decision.get("next_action") or "turn buyer signal into the paid test"
+    elif money_state == "rotate_one_variable" or ladder_stage == "review":
+        state = "rotate_after_no_signal"
+        primary_action = money_decision.get("next_action") or "rotate one controlled variable after the completed no-signal sample"
+    elif active_remaining > 0 and expected_next_sends > 0:
+        state = "prove_active_sample"
+        primary_action = (
+            launch_readiness.get("next_window_success_criterion")
+            or money_decision.get("next_action")
+            or "run the next send window"
+        )
+    elif active_remaining > 0:
+        state = "create_sample_capacity"
+        primary_action = launch_readiness.get("readiness_reason") or money_decision.get("next_action") or "prepare the active sample"
+    else:
+        state = "monitor_money_loop"
+        primary_action = success_governor.get("next_step") or money_decision.get("next_action") or "keep monitoring the money loop"
+
+    if payments > 0 or gross_usd > 0:
+        money_truth = "monetized"
+    elif revenue_gap_usd > 0:
+        money_truth = "not_monetized_yet"
+    else:
+        money_truth = "target_unknown"
+
+    manual_required = owner_absence.get("manual_input_required") is True
+
+    return {
+        "state": state,
+        "money_truth": money_truth,
+        "primary_metric": "paid tests",
+        "score": {
+            "gross_usd": gross_usd,
+            "payments": payments,
+            "weekly_target_usd": weekly_target_usd,
+            "revenue_gap_usd": revenue_gap_usd,
+        },
+        "primary_action": primary_action,
+        "success_condition": revenue_objective.get("success_condition") or "collect paid tests",
+        "proof_deadline": success_governor.get("audit_at") or launch_readiness.get("next_window_audit_at") or "",
+        "owner_policy": "manual_input_required" if manual_required else "owner_out_of_loop",
+        "owner_state": owner_absence.get("state") or "",
+        "current_stage": ladder_stage,
+        "governor_state": governor_state,
+        "allowed_autonomous_action": owner_absence.get("permitted_action") or primary_action,
+        "forbidden_until_proof": [
+            "do not ask Alan to choose the next move while owner_policy is owner_out_of_loop",
+            "do not increase volume before buyer signal or completed sample review",
+            "do not change more than one targeting, copy, price, or volume variable at a time",
+            "do not declare failure from an execution miss",
+        ],
+        "next_human_interrupt": owner_absence.get("next_owner_interrupt") or success_governor.get("human_policy"),
+    }
+
+
 def _parse_contract_datetime(value: Any) -> datetime | None:
     if not value:
         return None
@@ -2035,6 +2120,15 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
                 conversion_ladder=conversion_ladder,
                 revenue_objective=revenue_objective,
             )
+            autonomous_money_mandate = _autonomous_money_mandate(
+                revenue_objective=revenue_objective,
+                money_decision=money_decision_contract,
+                reply_autonomy=reply_autonomy_contract,
+                conversion_ladder=conversion_ladder,
+                success_governor=success_governor,
+                owner_absence=owner_absence_contract,
+                launch_readiness=launch_readiness,
+            )
             checks["money_system"] = {
                 "state": money_state,
                 "gross_usd": money.get("gross_usd", 0),
@@ -2047,6 +2141,7 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
                 "conversion_ladder": conversion_ladder,
                 "success_governor": success_governor,
                 "owner_absence_contract": owner_absence_contract,
+                "autonomous_money_mandate": autonomous_money_mandate,
                 "revenue_ladder": revenue_ladder,
                 "close_path": {
                     "replies": replies,
