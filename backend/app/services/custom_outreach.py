@@ -629,11 +629,32 @@ def _choose_smtp_mailbox(session: Session) -> SMTPMailbox:
     counts = _smtp_daily_counts(session)
     per_cap = _per_mailbox_daily_cap()
 
-    available = [m for m in mailboxes if counts.get(m.address.lower(), 0) < per_cap]
+    available = sorted(
+        [m for m in mailboxes if counts.get(m.address.lower(), 0) < per_cap],
+        key=lambda m: (counts.get(m.address.lower(), 0), m.slot),
+    )
     if not available:
         raise RuntimeError(f"All SMTP mailboxes are at cap ({per_cap}/day each)")
 
-    return min(available, key=lambda m: counts.get(m.address.lower(), 0))
+    return available[0]
+
+
+def _available_smtp_mailboxes() -> tuple[list[SMTPMailbox], int]:
+    with _session() as session:
+        mailboxes = _smtp_mailboxes()
+        if not mailboxes:
+            raise RuntimeError("No SMTP mailboxes configured")
+
+        counts = _smtp_daily_counts(session)
+        per_cap = _per_mailbox_daily_cap()
+
+    available = sorted(
+        [m for m in mailboxes if counts.get(m.address.lower(), 0) < per_cap],
+        key=lambda m: (counts.get(m.address.lower(), 0), m.slot),
+    )
+    if not available:
+        raise RuntimeError(f"All SMTP mailboxes are at cap ({per_cap}/day each)")
+    return available, per_cap
 
 
 def _smtp_send(to_email: str, subject: str, plain_text: str, html_body: str) -> dict[str, Any]:
@@ -641,48 +662,70 @@ def _smtp_send(to_email: str, subject: str, plain_text: str, html_body: str) -> 
     port = int(os.getenv("COLD_SMTP_PORT", "587").strip() or "587")
     security = os.getenv("COLD_SMTP_SECURITY", "starttls").strip().lower()
     reply_to = os.getenv("COLD_SMTP_REPLY_TO", settings.reply_to_email or "").strip()
+    mailboxes, per_cap = _available_smtp_mailboxes()
+    failures: list[dict[str, str]] = []
+    last_exc: Exception | None = None
 
-    with _session() as session:
-        mailbox = _choose_smtp_mailbox(session)
+    for mailbox in mailboxes:
+        message = EmailMessage()
+        message["From"] = mailbox.address
+        message["To"] = to_email
+        message["Subject"] = subject
+        if reply_to:
+            message["Reply-To"] = reply_to
+        message.set_content(plain_text)
+        message.add_alternative(
+            f"<div style='font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6'>{html_body}</div>",
+            subtype="html",
+        )
 
-    message = EmailMessage()
-    message["From"] = mailbox.address
-    message["To"] = to_email
-    message["Subject"] = subject
-    if reply_to:
-        message["Reply-To"] = reply_to
-    message.set_content(plain_text)
-    message.add_alternative(
-        f"<div style='font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6'>{html_body}</div>",
-        subtype="html",
-    )
-
-    if security == "ssl":
-        server = smtplib.SMTP_SSL(host, port, timeout=30)
-    else:
-        server = smtplib.SMTP(host, port, timeout=30)
-
-    try:
-        server.ehlo()
-        if security == "starttls":
-            server.starttls()
-            server.ehlo()
-        server.login(mailbox.address, mailbox.password)
-        server.sendmail(mailbox.address, [to_email], message.as_string())
-    finally:
+        server: smtplib.SMTP | smtplib.SMTP_SSL | None = None
         try:
-            server.quit()
-        except Exception:
-            pass
+            if security == "ssl":
+                server = smtplib.SMTP_SSL(host, port, timeout=30)
+            else:
+                server = smtplib.SMTP(host, port, timeout=30)
+            server.ehlo()
+            if security == "starttls":
+                server.starttls()
+                server.ehlo()
+            server.login(mailbox.address, mailbox.password)
+            rejected = server.sendmail(mailbox.address, [to_email], message.as_string())
+            if isinstance(rejected, dict) and to_email in rejected:
+                raise RuntimeError(f"SMTP recipient rejected: {to_email}")
+        except Exception as exc:
+            last_exc = exc
+            failures.append(
+                {
+                    "sender_address": mailbox.address,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc)[:500],
+                }
+            )
+            continue
+        finally:
+            if server is not None:
+                try:
+                    server.quit()
+                except Exception:
+                    pass
 
-    return {
-        "provider": "smtp",
-        "sender_address": mailbox.address,
-        "smtp_host": host,
-        "smtp_port": port,
-        "smtp_security": security,
-        "status": "sent",
-    }
+        return {
+            "provider": "smtp",
+            "sender_address": mailbox.address,
+            "smtp_host": host,
+            "smtp_port": port,
+            "smtp_security": security,
+            "smtp_failover_attempts": failures,
+            "smtp_mailboxes_available": len(mailboxes),
+            "smtp_per_mailbox_daily_cap": per_cap,
+            "status": "sent",
+        }
+
+    failure_summary = "; ".join(
+        f"{failure['sender_address']}:{failure['error_type']}" for failure in failures
+    )
+    raise RuntimeError(f"All available SMTP mailboxes failed: {failure_summary}") from last_exc
 
 
 def _outbound_send(to_email: str, subject: str, plain_text: str, html_body: str) -> dict[str, Any]:
