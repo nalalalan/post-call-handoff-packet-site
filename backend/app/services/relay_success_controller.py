@@ -939,8 +939,6 @@ def _run_outbound_experiment_review_if_needed(bottleneck: str, snapshot: dict[st
     sends = int(snapshot.get("outreach", {}).get("sends") or 0)
     replies = int(snapshot.get("outreach", {}).get("replies") or 0)
     payments = int(snapshot.get("money", {}).get("payments") or 0)
-    if sends < failure_sample:
-        return {"status": "skipped", "summary": "outbound sample is not large enough to rotate yet"}
 
     performance = relay_performance_status()
     active_plan = performance.get("active_experiment") or {}
@@ -956,7 +954,8 @@ def _run_outbound_experiment_review_if_needed(bottleneck: str, snapshot: dict[st
     active_sends = int(active_signal.get("sends") or 0)
     active_replies = int(active_signal.get("replies") or 0)
     active_payments = int(active_signal.get("payments") or 0)
-    if active_sends < failure_sample:
+    measurable_sends = max(active_sends, sends)
+    if measurable_sends < failure_sample:
         return {
             "status": "skipped",
             "summary": "active experiment still needs its own measurable send sample",
@@ -966,6 +965,7 @@ def _run_outbound_experiment_review_if_needed(bottleneck: str, snapshot: dict[st
             "aggregate_sends": sends,
             "aggregate_replies": replies,
             "aggregate_payments": payments,
+            "measurable_sends": measurable_sends,
             "failure_sample": failure_sample,
         }
     if active_replies > 0 or active_payments > 0:
