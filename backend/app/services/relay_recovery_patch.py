@@ -1725,6 +1725,14 @@ def _money_loop_success_sleep(result: dict[str, Any] | None, default_interval: i
                 seconds_until_deadline = 0
             if 0 < seconds_until_deadline <= default_interval:
                 return max(min(seconds_until_deadline + 5, default_interval), 5), "money_proof_deadline_watch"
+        if health_state == "waiting_for_reply_observation":
+            try:
+                seconds_until_deadline = int(proof_health.get("seconds_until_deadline") or 0)
+            except Exception:
+                seconds_until_deadline = 0
+            if 0 < seconds_until_deadline <= default_interval:
+                return max(min(seconds_until_deadline + 5, default_interval), 5), "reply_observation_deadline_watch"
+            return min(default_interval, 300), "reply_observation_watch"
         if health_state == "execution_proof_satisfied":
             return min(default_interval, 300), "money_proof_satisfied_watch"
     conversion_actions = (

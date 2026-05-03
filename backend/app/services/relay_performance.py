@@ -485,6 +485,24 @@ def _zero_signal_rotation_threshold() -> int:
     return max(1, _int_from(os.getenv("RELAY_ZERO_SIGNAL_ROTATION_ESCALATION_COUNT", "2"), 2))
 
 
+def _reply_observation_hours() -> int:
+    return max(1, _int_from(os.getenv("RELAY_ACTIVE_REPLY_OBSERVATION_HOURS", "24"), 24))
+
+
+def _reply_observation_pending(metrics: dict[str, Any] | None, min_sample: int, now: datetime) -> bool:
+    if not isinstance(metrics, dict):
+        return False
+    sends = _int_from(metrics.get("sends"))
+    replies = _int_from(metrics.get("replies"))
+    payments = _int_from(metrics.get("payments"))
+    if sends < min_sample or replies > 0 or payments > 0:
+        return False
+    last_sent_at = _parse_datetime(metrics.get("last_sent_at"))
+    if last_sent_at is None:
+        return False
+    return now < last_sent_at + timedelta(hours=_reply_observation_hours())
+
+
 def _zero_signal_plan(
     payload: dict[str, Any],
     min_sample: int,
@@ -504,6 +522,8 @@ def _zero_signal_plan(
             return False, "pending_sample"
         if replies > 0 or payments > 0:
             return False, "signal_found"
+        if _reply_observation_pending(live_metrics, min_sample, _now()):
+            return False, "reply_observation_pending"
         return True, "zero_signal"
 
     reason_text = " ".join(decision_reasons).lower()
@@ -557,7 +577,10 @@ def _latest_plan_sample_pending(session: Session, latest_plan: dict[str, Any] | 
         plan_created_at=_parse_datetime(latest_plan.get("logged_at")),
         now=now,
     )
-    return metrics is not None and _int_from(metrics.get("sends")) < min_sample
+    return metrics is not None and (
+        _int_from(metrics.get("sends")) < min_sample
+        or _reply_observation_pending(metrics, min_sample, now)
+    )
 
 
 def _zero_signal_rotation_count(session: Session) -> int:
@@ -582,7 +605,7 @@ def _zero_signal_rotation_count(session: Session) -> int:
         )
         is_zero_signal, state = _zero_signal_plan(payload, min_sample, live_metrics=live_metrics)
         if not is_zero_signal:
-            if state == "pending_sample" and count == 0:
+            if state in {"pending_sample", "reply_observation_pending"} and count == 0:
                 continue
             break
         count += 1
@@ -642,6 +665,10 @@ def _choose_variant(
     if replies > 0:
         reasons.append(f"Reply signal exists in the {evidence_name} without payments; make the paid test clearer.")
         return "paid_test_explicit", reasons
+
+    if latest_plan_sample_pending and previous_variant in EXPERIMENTS:
+        reasons.append("Latest active experiment still needs its own full evaluation window; keep it stable before rotating.")
+        return previous_variant, reasons
 
     reasons.append(f"No reply signal after measurable sends in the {evidence_name}; rotate one controlled copy/targeting variable.")
     if latest_plan_sample_pending and previous_variant in {"hard_paid_test_direct", "revenue_leak_direct"}:

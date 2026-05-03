@@ -466,6 +466,10 @@ def _experiment_failure_sample() -> int:
     return max(1, _int_env("RELAY_EXPERIMENT_FAILURE_SAMPLE", min_sample))
 
 
+def _active_reply_observation_hours() -> int:
+    return max(_int_env("RELAY_ACTIVE_REPLY_OBSERVATION_HOURS", 24), 1)
+
+
 def _zero_signal_rotation_threshold() -> int:
     return max(1, _int_env("RELAY_ZERO_SIGNAL_ROTATION_ESCALATION_COUNT", 2))
 
@@ -1416,9 +1420,63 @@ def _parse_iso_datetime(value: Any) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(str(value))
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except Exception:
         return None
+
+
+def _parse_utc_datetime(value: Any) -> datetime | None:
+    parsed = _parse_iso_datetime(value)
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _active_reply_observation_status(
+    performance: dict[str, Any],
+    *,
+    active_target: int,
+    active_sends: int,
+    active_replies: int,
+    active_payments: int,
+) -> dict[str, Any]:
+    hours = _active_reply_observation_hours()
+    active_signal = (
+        performance.get("active_experiment_signal")
+        if isinstance(performance.get("active_experiment_signal"), dict)
+        else {}
+    )
+    last_sent_at = _parse_utc_datetime(active_signal.get("last_sent_at"))
+    observe_until = last_sent_at + timedelta(hours=hours) if last_sent_at is not None else None
+    now = datetime.now(timezone.utc)
+    complete = active_target > 0 and active_sends >= active_target
+    no_signal = active_replies <= 0 and active_payments <= 0
+    pending = bool(complete and no_signal and observe_until is not None and now < observe_until)
+    seconds_until = int((observe_until - now).total_seconds()) if observe_until is not None else None
+    if seconds_until is not None:
+        seconds_until = max(seconds_until, 0)
+    if not complete:
+        reason = "active sample has not reached its target"
+    elif not no_signal:
+        reason = "active sample already has reply or payment signal"
+    elif observe_until is None:
+        reason = "active sample has no last-sent timestamp to observe"
+    elif pending:
+        reason = "active sample is complete, but the reply observation window has not matured"
+    else:
+        reason = "active sample reply observation window has matured"
+    return {
+        "complete": complete,
+        "no_signal": no_signal,
+        "pending": pending,
+        "hours": hours,
+        "last_sent_at": last_sent_at.isoformat() if last_sent_at is not None else "",
+        "observe_until": observe_until.isoformat() if observe_until is not None else "",
+        "seconds_until_observe_until": seconds_until,
+        "reason": reason,
+    }
 
 
 def _send_window_stall_grace_seconds() -> int:
@@ -1595,6 +1653,18 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
     except Exception as error:
         performance = {"status": "error", "error": str(error)}
 
+    active_signal = (
+        performance.get("active_experiment_signal")
+        if isinstance(performance.get("active_experiment_signal"), dict)
+        else {}
+    )
+    active_reply_observation = _active_reply_observation_status(
+        performance,
+        active_target=int(outreach.get("active_experiment_sample_target") or _experiment_failure_sample()),
+        active_sends=int(active_signal.get("sends") or outreach.get("active_experiment_sends") or 0),
+        active_replies=int(active_signal.get("replies") or 0),
+        active_payments=int(active_signal.get("payments") or 0),
+    )
     send_window_seconds_open = _send_window_seconds_open(outreach)
     due_now = int(outreach.get("due_now_count") or outreach.get("queued_count") or 0)
     sent_today = int(outreach.get("sent_today") or 0)
@@ -1706,6 +1776,7 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
         },
         "experiment_history": experiment_history,
         "performance": performance,
+        "active_reply_observation": active_reply_observation,
     }
 
 
@@ -1772,6 +1843,17 @@ def _bottleneck(snapshot: dict[str, Any]) -> str:
         and active_replies <= 0
         and active_payments <= 0
     )
+    active_reply_observation = (
+        snapshot.get("active_reply_observation")
+        if isinstance(snapshot.get("active_reply_observation"), dict)
+        else _active_reply_observation_status(
+            performance,
+            active_target=active_target,
+            active_sends=active_sends,
+            active_replies=active_replies,
+            active_payments=active_payments,
+        )
+    )
     no_signal_rotation_count = _safe_int(experiment_history.get("zero_signal_rotation_count"))
     no_signal_rotation_threshold = max(_safe_int(experiment_history.get("zero_signal_rotation_threshold")), 1)
     zero_signal_escalated = no_signal_rotation_count >= no_signal_rotation_threshold
@@ -1836,6 +1918,8 @@ def _bottleneck(snapshot: dict[str, Any]) -> str:
         return "outbound_window_missed"
     if _outbound_send_window_underfilled(outreach):
         return "outbound_window_underfilled"
+    if active_sample_complete_without_signal and bool(active_reply_observation.get("pending")):
+        return "active_sample_reply_window"
     if preempt_weak_zero_signal_lane:
         return "offer_market_rebuild_required"
     if outreach.get("active_experiment_needs_sample"):
@@ -1886,6 +1970,7 @@ def _next_action(bottleneck: str) -> str:
         "active_sample_execution_missed": (
             "Active sample proof missed its audit deadline; recover execution before judging demand."
         ),
+        "active_sample_reply_window": "Wait through the reply observation window before rotating copy or targeting.",
         "active_experiment_sample": "Collect the active outbound experiment sample before judging the offer.",
         "active_experiment_refill": "Refill fresh first-touch leads for the active outbound experiment.",
         "page_to_lead": "Improve the first-screen ask before changing the backend.",
@@ -1911,6 +1996,12 @@ def _money_proof_mandate(snapshot: dict[str, Any], bottleneck: str) -> dict[str,
         if isinstance(outreach.get("window_execution_contract"), dict)
         else {}
     )
+    active_reply_observation = (
+        snapshot.get("active_reply_observation")
+        if isinstance(snapshot.get("active_reply_observation"), dict)
+        else {}
+    )
+    active_reply_observation_deadline = str(active_reply_observation.get("observe_until") or "").strip()
     gross_usd = round(_safe_float(money.get("gross_usd")), 2)
     payments = int(money.get("payments") or 0)
     weekly_target_usd = _safe_float(os.getenv("RELAY_WEEKLY_TARGET_USD", "100"), 100.0)
@@ -1956,6 +2047,13 @@ def _money_proof_mandate(snapshot: dict[str, Any], bottleneck: str) -> dict[str,
     elif payments > 0 or bottleneck == "paid_signal_keep_stable":
         state = "protect_winning_lane"
         primary_action = "keep the paid lane stable and continue only controlled tests that do not disturb fulfillment"
+        owner_policy = "owner_out_of_loop"
+    elif bottleneck == "active_sample_reply_window":
+        state = "observe_active_sample"
+        if active_reply_observation_deadline:
+            primary_action = f"wait until {active_reply_observation_deadline} before changing copy or targeting"
+        else:
+            primary_action = "wait through the active sample reply observation window before changing copy or targeting"
         owner_policy = "owner_out_of_loop"
     elif bottleneck in {
         "active_sample_execution_missed",
@@ -2011,8 +2109,15 @@ def _money_proof_mandate(snapshot: dict[str, Any], bottleneck: str) -> dict[str,
             "zero_signal_current_evidence_count": zero_signal_effective_count,
             "zero_signal_rotation_threshold": zero_signal_threshold,
             "zero_signal_rotation_escalated": zero_signal_effective_count >= zero_signal_threshold,
+            "active_reply_observation_pending": bool(active_reply_observation.get("pending")),
+            "active_reply_observation_deadline": active_reply_observation_deadline,
+            "active_reply_observation_hours": _safe_int(active_reply_observation.get("hours")),
         },
-        "proof_deadline": window_contract.get("audit_at") or outreach.get("next_window_audit_at") or "",
+        "proof_deadline": (
+            active_reply_observation_deadline
+            if state == "observe_active_sample" and active_reply_observation_deadline
+            else window_contract.get("audit_at") or outreach.get("next_window_audit_at") or ""
+        ),
         "success_condition": (
             "weekly revenue target met"
             if gross_usd >= weekly_target_usd
@@ -2070,6 +2175,10 @@ def _money_proof_health(mandate: dict[str, Any]) -> dict[str, Any]:
         health = "active_signal_open"
         reason = "active sample has buyer signal ahead of payment"
         recovery = "keep the active lane stable and convert replies to checkout or payment"
+    elif state == "observe_active_sample":
+        health = "waiting_for_reply_observation"
+        reason = "active sample is sent, but the reply observation window has not matured"
+        recovery = "keep the active lane stable until the observation deadline, then review real signal"
     elif state == "rotate_one_variable":
         health = "rotation_required"
         reason = "completed sample has no buyer signal or payment"
@@ -2113,7 +2222,7 @@ def _money_proof_health(mandate: dict[str, Any]) -> dict[str, Any]:
         "actual_active_sends": actual_active_sends,
         "autonomous_recovery_action": recovery,
         "owner_interrupt": health in {"paid_fulfillment_open", "execution_proof_missed", "recovery_required", "buyer_signal_open"},
-        "do_not_judge_demand": health in {"execution_proof_missed", "recovery_required"},
+        "do_not_judge_demand": health in {"execution_proof_missed", "recovery_required", "waiting_for_reply_observation"},
     }
 
 
@@ -2140,6 +2249,11 @@ def _run_outbound_experiment_review_if_needed(bottleneck: str, snapshot: dict[st
     active_sends = int(active_signal.get("sends") or 0)
     active_replies = int(active_signal.get("replies") or 0)
     active_payments = int(active_signal.get("payments") or 0)
+    active_reply_observation = (
+        snapshot.get("active_reply_observation")
+        if isinstance(snapshot.get("active_reply_observation"), dict)
+        else {}
+    )
     measurable_sends = max(active_sends, sends)
     if measurable_sends < failure_sample:
         return {
@@ -2153,6 +2267,17 @@ def _run_outbound_experiment_review_if_needed(bottleneck: str, snapshot: dict[st
             "aggregate_payments": payments,
             "measurable_sends": measurable_sends,
             "failure_sample": failure_sample,
+        }
+    if bool(active_reply_observation.get("pending")):
+        return {
+            "status": "skipped",
+            "summary": "active experiment is inside its reply observation window",
+            "active_variant": active_variant,
+            "active_experiment_sends": active_sends,
+            "active_experiment_replies": active_replies,
+            "active_experiment_payments": active_payments,
+            "failure_sample": failure_sample,
+            "observe_until": active_reply_observation.get("observe_until"),
         }
     if active_replies > 0 or active_payments > 0:
         return {

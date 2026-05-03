@@ -970,7 +970,7 @@ def _launch_readiness_contract(
         "phase": experiment_decision_state,
         "proof_target": proof_target,
         "success_metric": success_metric,
-        "review_rule": "do not judge the offer until the active sample is complete or real buyer signal appears",
+        "review_rule": "do not judge the offer until the active sample is complete and its reply window has matured, or real buyer signal appears",
         "interrupt_rule": interrupt_rule,
         "next_decision": experiment_decision_next,
         "active_experiment_progress": f"{active_sends}/{active_target}" if active_target else "",
@@ -2028,6 +2028,12 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
 
             performance = relay_performance_status()
             success = relay_success_status()
+            success_snapshot = success.get("snapshot") or {}
+            active_reply_observation = (
+                success_snapshot.get("active_reply_observation")
+                if isinstance(success_snapshot.get("active_reply_observation"), dict)
+                else {}
+            )
             active_experiment = performance.get("active_experiment") or {}
             outreach = outreach_status()
             active_sends = _safe_int(outreach.get("active_experiment_sends"))
@@ -2043,6 +2049,9 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
             elif active_signal_replies > 0 or active_signal_payments > 0:
                 experiment_decision_state = "signal_exists_keep_stable"
                 experiment_decision_next = "Keep the current lane stable and focus on closing real signal."
+            elif bool(active_reply_observation.get("pending")):
+                experiment_decision_state = "observing_reply_window"
+                experiment_decision_next = "Wait through the active sample reply window before rotating copy or targeting."
             else:
                 experiment_decision_state = "ready_to_review_or_rotate"
                 experiment_decision_next = "Run the outbound experiment review and rotate one controlled variable."
@@ -2107,14 +2116,15 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
                     "active_experiment_sends_remaining": active_remaining,
                     "active_experiment_replies": active_signal_replies,
                     "active_experiment_payments": active_signal_payments,
+                    "active_reply_observation": active_reply_observation,
                 },
             }
-            success_snapshot = success.get("snapshot") or {}
             checks["relay_success"] = {
                 "bottleneck": success.get("bottleneck"),
                 "next_action": success.get("next_action"),
                 "money_proof_mandate": success.get("money_proof_mandate") or {},
                 "money_proof_health": success.get("money_proof_health") or {},
+                "active_reply_observation": active_reply_observation,
                 "money": success_snapshot.get("money") or {},
                 "intent": success_snapshot.get("intent") or {},
                 "outreach": success_snapshot.get("outreach") or {},
@@ -2291,6 +2301,7 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
                 "active_experiment_progress": f"{active_sends}/{active_target}" if active_target else "",
                 "active_experiment_sends_remaining": active_remaining,
                 "active_experiment_signal_window": performance.get("active_experiment_signal_window") or {},
+                "active_reply_observation": active_reply_observation,
                 "expected_next_window_sends": launch_readiness.get("expected_next_window_sends"),
                 "readiness_state": launch_readiness.get("readiness_state"),
                 "readiness_reason": launch_readiness.get("readiness_reason"),
