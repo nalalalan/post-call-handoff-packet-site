@@ -127,7 +127,7 @@ def _apollo_refill_timeout_seconds() -> float:
 
 
 def _apify_fallback_timeout_seconds() -> float:
-    return _env_float("AO_RELAY_APIFY_FALLBACK_TIMEOUT_SECONDS", 90.0)
+    return _env_float("AO_RELAY_APIFY_FALLBACK_TIMEOUT_SECONDS", 60.0)
 
 
 def _refill_timeout_backoff_seconds() -> float:
@@ -729,9 +729,9 @@ def _apify_refill_query_candidates(primary_query: str | None) -> list[str]:
             add("paid media agency los angeles")
             add("paid media agency austin")
         elif "agency" in text:
-            add("digital marketing agency new york")
-            add("b2b marketing agency los angeles")
-            add("client services agency chicago")
+            add("paid media agency miami")
+            add("ppc agency phoenix")
+            add("performance marketing agency nashville")
 
     add_category_variants(primary_query)
     try:
@@ -768,9 +768,9 @@ def _apify_refill_query_candidates(primary_query: str | None) -> list[str]:
         "performance marketing agency",
         "paid social agency",
         "meta ads agency",
-        "b2b marketing agency",
-        "ecommerce marketing agency",
-        "digital marketing agency",
+        "google ads agency",
+        "ppc agency",
+        "paid media agency",
     ]
     for index, city in enumerate(cities):
         add(f"{categories[index % len(categories)]} {city}")
@@ -1386,8 +1386,7 @@ async def _relay_money_loop_tick(
                             ),
                         }
                         fallback_attempts.append(fallback_result)
-                        if fallback_timeout:
-                            break
+                        continue
 
                 refill_result = {
                     "status": "degraded_ok" if fallback_attempts else "error",
