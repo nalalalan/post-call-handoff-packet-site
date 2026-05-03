@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -341,38 +342,44 @@ async def _extract_email_from_website(website: str) -> str:
         base + "/about",
         base + "/about-us",
         base + "/services",
-        base + "/google-ads",
-        base + "/ppc",
     ]
 
-    async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-        for url in candidates:
+    try:
+        timeout_seconds = max(float(os.getenv("APIFY_EMAIL_EXTRACT_TIMEOUT_SECONDS", "4") or 4), 1.0)
+    except Exception:
+        timeout_seconds = 4.0
+
+    async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
+        async def fetch(url: str) -> str:
             try:
                 resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-                text = resp.text or ""
-                matches = EMAIL_REGEX.findall(text)
-                for email in matches:
-                    email_l = _normalize_email(email)
-                    if _looks_fake_or_low_value_email(email_l, business_domain=business_domain):
-                        continue
-                    if any(
-                        bad in email_l
-                        for bad in [
-                            ".png",
-                            ".jpg",
-                            ".jpeg",
-                            ".webp",
-                            ".svg",
-                            "@sentry",
-                            "@example",
-                            "wixpress",
-                            "cloudflare",
-                        ]
-                    ):
-                        continue
-                    return email_l
+                return resp.text or ""
             except Exception:
-                continue
+                return ""
+
+        pages = await asyncio.gather(*(fetch(url) for url in candidates))
+        for text in pages:
+            matches = EMAIL_REGEX.findall(text)
+            for email in matches:
+                email_l = _normalize_email(email)
+                if _looks_fake_or_low_value_email(email_l, business_domain=business_domain):
+                    continue
+                if any(
+                    bad in email_l
+                    for bad in [
+                        ".png",
+                        ".jpg",
+                        ".jpeg",
+                        ".webp",
+                        ".svg",
+                        "@sentry",
+                        "@example",
+                        "wixpress",
+                        "cloudflare",
+                    ]
+                ):
+                    continue
+                return email_l
 
     return ""
 
@@ -381,14 +388,31 @@ async def import_from_apollo_search(payload: Dict[str, Any]) -> Dict[str, Any]:
     client = ApifyClient(settings.apify_api_token)
     q_keywords = str(payload.get("q_keywords") or "ppc agency founder").strip() or "ppc agency founder"
 
+    try:
+        max_places = max(int(os.getenv("APIFY_MAX_CRAWLED_PLACES_PER_SEARCH", "20") or 20), 1)
+    except Exception:
+        max_places = 20
+
     run_input = {
         "searchStringsArray": [q_keywords],
         "locationQuery": "United States",
-        "maxCrawledPlacesPerSearch": 20,
+        "maxCrawledPlacesPerSearch": max_places,
     }
 
     run = client.actor(settings.apify_google_maps_actor_id).call(run_input=run_input)
     items = client.dataset(run["defaultDatasetId"]).list_items().items
+
+    try:
+        extract_concurrency = max(int(os.getenv("APIFY_EMAIL_EXTRACT_CONCURRENCY", "4") or 4), 1)
+    except Exception:
+        extract_concurrency = 4
+    semaphore = asyncio.Semaphore(extract_concurrency)
+
+    async def extract_email(item: Dict[str, Any]) -> str:
+        async with semaphore:
+            return await _extract_email_from_website(item.get("website") or "")
+
+    emails = await asyncio.gather(*(extract_email(item) for item in items))
 
     with _session() as session:
         count = 0
@@ -397,9 +421,8 @@ async def import_from_apollo_search(payload: Dict[str, Any]) -> Dict[str, Any]:
         missing_email = 0
         rejected_or_unsendable = 0
 
-        for item in items:
+        for item, email in zip(items, emails):
             website = item.get("website") or ""
-            email = await _extract_email_from_website(website)
 
             row = {
                 "id": item.get("placeId") or item.get("title"),
