@@ -139,10 +139,12 @@ def _due_followup_counts(session: Session, *, now: datetime) -> dict[str, int]:
     messy_cutoff = now - timedelta(hours=int(os.getenv("RELAY_MESSY_NOTES_FOLLOWUP_HOURS", "2") or "2"))
     sample_cutoff = now - timedelta(hours=int(os.getenv("RELAY_SAMPLE_FOLLOWUP_HOURS", "24") or "24"))
     checkout_cutoff = now - timedelta(hours=int(os.getenv("RELAY_CHECKOUT_FOLLOWUP_HOURS", "1") or "1"))
+    checkout_second_cutoff = now - timedelta(hours=int(os.getenv("RELAY_CHECKOUT_SECOND_FOLLOWUP_HOURS", "24") or "24"))
 
     messy_due = 0
     sample_due = 0
     checkout_due = 0
+    checkout_second_due = 0
 
     messy_leads = session.execute(
         select(RelayIntentLead)
@@ -233,10 +235,44 @@ def _due_followup_counts(session: Session, *, now: datetime) -> dict[str, int]:
             continue
         checkout_due += 1
 
+    first_checkout_followups = session.execute(
+        select(AcquisitionEvent)
+        .where(AcquisitionEvent.event_type == "autopilot_checkout_intent_followup_sent")
+        .where(AcquisitionEvent.created_at <= checkout_second_cutoff)
+        .limit(100)
+    ).scalars().all()
+    seen_second_sessions: set[str] = set()
+    for followup in first_checkout_followups:
+        payload = _safe_json(followup.payload_json)
+        session_id = str(payload.get("session_id") or "").strip()
+        if not session_id and followup.prospect_external_id.startswith("relay-session:"):
+            session_id = followup.prospect_external_id.split(":", 1)[1].strip()
+        if not session_id or session_id in seen_second_sessions:
+            continue
+        seen_second_sessions.add(session_id)
+        exists = session.execute(
+            select(AcquisitionEvent.id)
+            .where(AcquisitionEvent.prospect_external_id == f"relay-session:{session_id}")
+            .where(AcquisitionEvent.event_type == "autopilot_checkout_intent_second_followup_sent")
+            .limit(1)
+        ).scalar_one_or_none()
+        if exists is not None:
+            continue
+        lead = session.execute(
+            select(RelayIntentLead)
+            .where(RelayIntentLead.session_id == session_id)
+            .order_by(RelayIntentLead.created_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if lead is None or not lead.email or _paid_for_email(session, lead.email):
+            continue
+        checkout_second_due += 1
+
     return {
         "messy_notes_due": messy_due,
         "sample_request_due": sample_due,
         "checkout_intent_due": checkout_due,
+        "checkout_intent_second_due": checkout_second_due,
     }
 
 
@@ -276,6 +312,7 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
             _event_count(session, "autopilot_messy_notes_checkout_followup_sent", since=since)
             + _event_count(session, "autopilot_sample_notes_followup_sent", since=since)
             + _event_count(session, "autopilot_checkout_intent_followup_sent", since=since)
+            + _event_count(session, "autopilot_checkout_intent_second_followup_sent", since=since)
         )
         due_followups = _due_followup_counts(session, now=now)
 
@@ -316,6 +353,7 @@ def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
             "messy_notes_followups_due": due_followups["messy_notes_due"],
             "sample_followups_due": due_followups["sample_request_due"],
             "checkout_followups_due": due_followups["checkout_intent_due"],
+            "checkout_second_followups_due": due_followups["checkout_intent_second_due"],
             "paid_onboarding_sent": onboarding,
             "paid_notes_fulfilled": fulfilled,
         },
@@ -338,6 +376,8 @@ def _bottleneck(snapshot: dict[str, Any]) -> str:
     if int(conversion.get("sample_followups_due") or 0) > 0:
         return "sample_to_notes"
     if int(conversion.get("checkout_followups_due") or 0) > 0:
+        return "checkout_to_payment"
+    if int(conversion.get("checkout_second_followups_due") or 0) > 0:
         return "checkout_to_payment"
     if int(intent.get("checkout_clicks") or 0) > int(money.get("payments") or 0):
         return "checkout_to_payment"
