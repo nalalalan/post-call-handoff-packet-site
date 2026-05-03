@@ -641,6 +641,8 @@ def _ready_label(checks: dict[str, Any]) -> str:
     if not recent.get("last_stripe_event"):
         return "needs_stripe_live_test"
     if not recent.get("last_tally_event") and not recent.get("last_paid_relay_notes_fulfillment"):
+        if recent.get("last_intake_smoke_test"):
+            return "intake_smoke_ready_needs_paid_buyer"
         if recent.get("last_real_notes_intake_lead") or recent.get("last_notes_intake_lead"):
             return "notes_intake_ready_needs_paid_buyer"
         return "needs_intake_live_test"
@@ -984,7 +986,8 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
 
         recent = {
             "last_stripe_event": _latest_acquisition_event(db, "stripe"),
-            "last_tally_event": _latest_acquisition_event(db, "intake"),
+            "last_tally_event": _latest_acquisition_event(db, "intake_received"),
+            "last_intake_smoke_test": _latest_acquisition_event(db, "relay_intake_smoke_test"),
             "last_payment_or_paid_prospect": _latest_acquisition_event(db, "paid"),
             "last_success_control_tick": _latest_acquisition_event(db, "relay_success_control_tick"),
             "last_money_loop_tick": _latest_acquisition_event(db, "relay_money_loop_tick"),

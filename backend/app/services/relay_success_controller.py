@@ -21,6 +21,7 @@ from app.services.relay_performance import relay_performance_status, run_weekly_
 
 
 SUCCESS_TICK_EVENT = "relay_success_control_tick"
+INTAKE_SMOKE_EVENT = "relay_intake_smoke_test"
 
 
 def _session() -> Session:
@@ -419,6 +420,8 @@ def _env_snapshot() -> dict[str, bool]:
     return {
         "DATABASE_URL": bool(settings.database_url),
         "RESEND_API_KEY": bool(settings.resend_api_key),
+        "STRIPE_WEBHOOK_SECRET": bool(settings.stripe_webhook_secret),
+        "TALLY_WEBHOOK_SECRET": bool(settings.tally_webhook_secret),
         "PACKET_CHECKOUT_URL": bool(settings.packet_checkout_url),
         "CLIENT_INTAKE_DESTINATION": bool(settings.client_intake_destination or os.getenv("CLIENT_INTAKE_URL", "").strip()),
         "FROM_EMAIL_FULFILLMENT": bool(settings.from_email_fulfillment),
@@ -437,6 +440,69 @@ def _int_env(name: str, default: int) -> int:
 def _experiment_failure_sample() -> int:
     min_sample = _int_env("RELAY_EXPERIMENT_MIN_SAMPLE", 20)
     return max(1, _int_env("RELAY_EXPERIMENT_FAILURE_SAMPLE", min_sample))
+
+
+def _intake_smoke_interval_hours() -> int:
+    return max(_int_env("RELAY_INTAKE_SMOKE_INTERVAL_HOURS", 24), 1)
+
+
+def _run_intake_smoke_check_if_needed() -> dict[str, Any]:
+    now = _now()
+    interval_hours = _intake_smoke_interval_hours()
+    with _session() as session:
+        latest = session.execute(
+            select(AcquisitionEvent)
+            .where(AcquisitionEvent.event_type == INTAKE_SMOKE_EVENT)
+            .order_by(AcquisitionEvent.created_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if latest is not None and latest.created_at is not None:
+            age_seconds = max(int((now - latest.created_at.replace(tzinfo=None)).total_seconds()), 0)
+            if age_seconds < interval_hours * 3600:
+                return {
+                    "status": "skipped",
+                    "summary": "recent_intake_smoke_check_exists",
+                    "latest_at": latest.created_at.isoformat(),
+                    "age_seconds": age_seconds,
+                    "interval_hours": interval_hours,
+                }
+
+        env = _env_snapshot()
+        missing = [
+            name
+            for name in [
+                "TALLY_WEBHOOK_SECRET",
+                "CLIENT_INTAKE_DESTINATION",
+                "FROM_EMAIL_FULFILLMENT",
+            ]
+            if not env.get(name)
+        ]
+        status = "ok" if not missing else "error"
+        summary = "intake_smoke_config_ok" if not missing else "intake_smoke_missing_config"
+        payload = {
+            "status": status,
+            "missing": missing,
+            "route": "/webhooks/tally",
+            "client_intake_destination_configured": env.get("CLIENT_INTAKE_DESTINATION"),
+            "did_not_create_payment": True,
+            "did_not_send_customer_email": True,
+            "checked_at": now.isoformat(),
+        }
+        session.add(
+            AcquisitionEvent(
+                event_type=INTAKE_SMOKE_EVENT,
+                prospect_external_id="relay-intake-smoke",
+                summary=summary,
+                payload_json=json.dumps(payload, ensure_ascii=False),
+            )
+        )
+        session.commit()
+        return {
+            "status": status,
+            "summary": summary,
+            "missing": missing,
+            "interval_hours": interval_hours,
+        }
 
 
 def _parse_iso_datetime(value: Any) -> datetime | None:
@@ -753,6 +819,7 @@ def run_relay_success_control_tick() -> dict[str, Any]:
     bottleneck = _bottleneck(before)
 
     actions: dict[str, Any] = {}
+    actions["intake_smoke_check"] = _run_intake_smoke_check_if_needed()
     actions["inbound_conversion"] = run_inbound_conversion_sweep()
     actions["paid_intake_reminders"] = run_paid_intake_reminder_sweep(
         hours=int(os.getenv("OPS_INTAKE_REMINDER_HOURS", "12") or "12")
