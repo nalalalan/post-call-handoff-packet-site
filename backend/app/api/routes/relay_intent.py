@@ -82,6 +82,12 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _ceil_div(numerator: int, denominator: int) -> int:
+    if numerator <= 0 or denominator <= 0:
+        return 0
+    return (numerator + denominator - 1) // denominator
+
+
 def _configured_offer_url(env_name: str, setting_name: str) -> str:
     return (
         os.getenv(env_name, "").strip()
@@ -1104,6 +1110,12 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
             active_due = _safe_int(outreach.get("active_experiment_new_due_count"))
             active_remaining = max(active_target - active_sends, 0) if active_target else 0
             cap_remaining = _safe_int(outreach.get("cap_remaining"))
+            effective_daily_cap = _safe_int(outreach.get("effective_daily_cap") or outreach.get("daily_send_cap"))
+            positive_caps = [value for value in [cap_remaining, effective_daily_cap] if value > 0]
+            window_cap = min(positive_caps) if positive_caps else 0
+            send_capacity_per_window = min(active_due, window_cap) if active_remaining > 0 and active_due > 0 else 0
+            sample_windows_to_complete = _ceil_div(active_remaining, send_capacity_per_window)
+            queued_sample_covers_remaining = active_due >= active_remaining if active_remaining > 0 else True
             send_window_open = bool(outreach.get("send_window_is_open"))
             active_queue_ready = active_due > 0 and cap_remaining > 0
             active_autonomous_ready = active_queue_ready and send_window_open
@@ -1130,7 +1142,10 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
                     "active_experiment_generic_sample_daily_cap": outreach.get("active_experiment_generic_sample_daily_cap"),
                     "direct_due_count": outreach.get("direct_due_count"),
                     "cap_remaining": cap_remaining,
-                    "effective_daily_cap": outreach.get("effective_daily_cap"),
+                    "effective_daily_cap": effective_daily_cap,
+                    "active_experiment_send_capacity_per_window": send_capacity_per_window,
+                    "active_experiment_windows_to_complete_at_current_cap": sample_windows_to_complete,
+                    "active_experiment_queued_sample_covers_remaining": queued_sample_covers_remaining,
                     "send_window_is_open": send_window_open,
                     "send_window_reason": outreach.get("send_window_reason"),
                     "send_window_now_local": outreach.get("send_window_now_local"),
@@ -1176,6 +1191,8 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
                 },
                 "active_experiment_progress": f"{active_sends}/{active_target}" if active_target else "",
                 "active_experiment_sends_remaining": active_remaining,
+                "active_experiment_windows_to_complete_at_current_cap": sample_windows_to_complete,
+                "active_experiment_queued_sample_covers_remaining": queued_sample_covers_remaining,
                 "queued_direct_leads": outreach.get("direct_due_count"),
                 "cap_remaining": cap_remaining,
                 "loop_status": checks.get("money_loop_runtime", {}).get("status"),
