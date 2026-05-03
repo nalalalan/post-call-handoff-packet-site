@@ -2108,6 +2108,7 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
                 "bottleneck": success.get("bottleneck"),
                 "next_action": success.get("next_action"),
                 "money_proof_mandate": success.get("money_proof_mandate") or {},
+                "money_proof_health": success.get("money_proof_health") or {},
                 "money": success_snapshot.get("money") or {},
                 "intent": success_snapshot.get("intent") or {},
                 "outreach": success_snapshot.get("outreach") or {},
@@ -2232,16 +2233,22 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
                 launch_readiness=launch_readiness,
             )
             money_proof_mandate = success.get("money_proof_mandate") or {}
-            money_proof_health = _money_proof_health(
-                money_proof_mandate=money_proof_mandate,
-                autonomous_money_mandate=autonomous_money_mandate,
-                launch_readiness=launch_readiness,
-                active_sends=active_sends,
-                active_remaining=active_remaining,
-                payments=payments,
-                replies=replies,
-                checkout_clicks=checkout_clicks,
+            money_proof_health = (
+                success.get("money_proof_health")
+                if isinstance(success.get("money_proof_health"), dict)
+                else {}
             )
+            if not money_proof_health:
+                money_proof_health = _money_proof_health(
+                    money_proof_mandate=money_proof_mandate,
+                    autonomous_money_mandate=autonomous_money_mandate,
+                    launch_readiness=launch_readiness,
+                    active_sends=active_sends,
+                    active_remaining=active_remaining,
+                    payments=payments,
+                    replies=replies,
+                    checkout_clicks=checkout_clicks,
+                )
             checks["relay_success"]["money_proof_health"] = money_proof_health
             checks["money_system"] = {
                 "state": money_state,

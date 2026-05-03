@@ -1692,6 +1692,24 @@ def _money_loop_success_sleep(result: dict[str, Any] | None, default_interval: i
         return min(default_interval, 120), "execution_failure_watch"
     if bottleneck in {"messy_notes_to_payment", "sample_to_notes"}:
         return min(default_interval, 300), "conversion_followup_due"
+    for success_result in (success_after, success_before):
+        proof_health = (
+            success_result.get("money_proof_health")
+            if isinstance(success_result.get("money_proof_health"), dict)
+            else {}
+        )
+        health_state = str(proof_health.get("state") or "").strip()
+        if health_state in {"execution_proof_missed", "recovery_required", "buyer_signal_open"}:
+            return min(default_interval, 120), "money_proof_recovery_watch"
+        if health_state == "waiting_for_proof_deadline":
+            try:
+                seconds_until_deadline = int(proof_health.get("seconds_until_deadline") or 0)
+            except Exception:
+                seconds_until_deadline = 0
+            if 0 < seconds_until_deadline <= default_interval:
+                return max(min(seconds_until_deadline + 5, default_interval), 5), "money_proof_deadline_watch"
+        if health_state == "execution_proof_satisfied":
+            return min(default_interval, 300), "money_proof_satisfied_watch"
     conversion_actions = (
         success_after.get("conversion_actions")
         if isinstance(success_after.get("conversion_actions"), dict)

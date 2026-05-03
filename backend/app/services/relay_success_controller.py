@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -1037,6 +1037,7 @@ def _money_proof_mandate(snapshot: dict[str, Any], bottleneck: str) -> dict[str,
     active_target = int(outreach.get("active_experiment_sample_target") or _experiment_failure_sample())
     active_remaining = max(active_target - active_sends, 0) if active_target else 0
     expected_sends = int(window_contract.get("expected_sends") or 0)
+    expected_active_sends = active_sends + expected_sends if expected_sends > 0 else active_sends
     checkout_gap = max(int(intent.get("checkout_clicks") or 0) - payments, 0)
     unhandled_replies = int(outreach.get("unhandled_replies") or 0)
     fulfilled = int(conversion.get("paid_notes_fulfilled") or 0)
@@ -1091,6 +1092,9 @@ def _money_proof_mandate(snapshot: dict[str, Any], bottleneck: str) -> dict[str,
             "weekly_target_usd": weekly_target_usd,
             "revenue_gap_usd": round(max(weekly_target_usd - gross_usd, 0), 2),
             "active_experiment_progress": f"{active_sends}/{active_target}" if active_target else "",
+            "actual_active_sends": active_sends,
+            "expected_next_sends": expected_sends,
+            "expected_active_sends": expected_active_sends,
             "active_experiment_remaining": active_remaining,
             "unhandled_replies": unhandled_replies,
             "checkout_to_payment_gap": checkout_gap,
@@ -1108,6 +1112,75 @@ def _money_proof_mandate(snapshot: dict[str, Any], bottleneck: str) -> dict[str,
             "do not change more than one targeting, copy, price, or volume variable at a time",
             "do not declare failure from an execution miss",
         ],
+    }
+
+
+def _parse_proof_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except Exception:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _money_proof_health(mandate: dict[str, Any]) -> dict[str, Any]:
+    score = mandate.get("score") if isinstance(mandate.get("score"), dict) else {}
+    state = str(mandate.get("state") or "").strip()
+    payments = _safe_int(score.get("payments"))
+    checkout_gap = _safe_int(score.get("checkout_to_payment_gap"))
+    unhandled_replies = _safe_int(score.get("unhandled_replies"))
+    actual_active_sends = _safe_int(score.get("actual_active_sends"))
+    expected_active_sends = _safe_int(score.get("expected_active_sends"))
+    deadline = str(mandate.get("proof_deadline") or "").strip()
+    deadline_at = _parse_proof_datetime(deadline)
+    now = datetime.now(timezone.utc)
+    overdue = deadline_at is not None and now > deadline_at
+    seconds_until_deadline = int((deadline_at - now).total_seconds()) if deadline_at is not None else None
+
+    if payments > 0:
+        health = "money_proof_satisfied"
+        reason = "payment exists"
+        recovery = "fulfill the paid buyer and keep the current lane stable"
+    elif checkout_gap > 0 or unhandled_replies > 0:
+        health = "buyer_signal_open"
+        reason = "buyer signal is ahead of payment"
+        recovery = "close buyer signal through the paid test before changing the experiment"
+    elif state == "prove_active_sample" and expected_active_sends > 0 and actual_active_sends >= expected_active_sends:
+        health = "execution_proof_satisfied"
+        reason = f"active sends reached {actual_active_sends}, meeting the expected proof of {expected_active_sends}"
+        recovery = "continue the active sample without changing variables"
+    elif state == "prove_active_sample" and overdue:
+        health = "execution_proof_missed"
+        reason = f"proof deadline passed before active sends reached {expected_active_sends}"
+        recovery = "treat this as an execution miss, run recovery, and do not judge demand"
+    elif state in {"restore_revenue_loop", "restore_send_execution"}:
+        health = "recovery_required"
+        reason = str(mandate.get("primary_action") or "revenue loop needs recovery")
+        recovery = str(mandate.get("allowed_autonomous_action") or mandate.get("primary_action") or "restore the revenue loop")
+    elif deadline_at is not None:
+        health = "waiting_for_proof_deadline"
+        reason = "proof deadline has not arrived"
+        recovery = "stay out and let the approved autonomous action run"
+    else:
+        health = "watching_money_proof"
+        reason = str(mandate.get("primary_action") or "watch the current money proof")
+        recovery = str(mandate.get("allowed_autonomous_action") or mandate.get("primary_action") or "continue the current money proof")
+
+    return {
+        "state": health,
+        "reason": reason,
+        "proof_state": state,
+        "proof_deadline": deadline,
+        "seconds_until_deadline": seconds_until_deadline,
+        "expected_active_sends": expected_active_sends,
+        "actual_active_sends": actual_active_sends,
+        "autonomous_recovery_action": recovery,
+        "owner_interrupt": health in {"execution_proof_missed", "recovery_required", "buyer_signal_open"},
+        "do_not_judge_demand": health in {"execution_proof_missed", "recovery_required"},
     }
 
 
@@ -1225,6 +1298,7 @@ def run_relay_success_control_tick() -> dict[str, Any]:
     before = relay_success_snapshot(days=7)
     bottleneck = _bottleneck(before)
     before_money_proof_mandate = _money_proof_mandate(before, bottleneck)
+    before_money_proof_health = _money_proof_health(before_money_proof_mandate)
 
     actions: dict[str, Any] = {}
     actions["intake_smoke_check"] = _run_intake_smoke_check_if_needed()
@@ -1242,6 +1316,7 @@ def run_relay_success_control_tick() -> dict[str, Any]:
     after = relay_success_snapshot(days=7)
     after_bottleneck = _bottleneck(after)
     money_proof_mandate = _money_proof_mandate(after, after_bottleneck)
+    money_proof_health = _money_proof_health(money_proof_mandate)
     result = {
         "status": "ok",
         "bottleneck": bottleneck,
@@ -1249,7 +1324,9 @@ def run_relay_success_control_tick() -> dict[str, Any]:
         "after_bottleneck": after_bottleneck,
         "after_next_action": _next_action(after_bottleneck),
         "before_money_proof_mandate": before_money_proof_mandate,
+        "before_money_proof_health": before_money_proof_health,
         "money_proof_mandate": money_proof_mandate,
+        "money_proof_health": money_proof_health,
         "bottleneck_changed": after_bottleneck != bottleneck,
         "before": before,
         "actions": actions,
@@ -1276,6 +1353,7 @@ def relay_success_status() -> dict[str, Any]:
     snapshot = relay_success_snapshot(days=7)
     bottleneck = _bottleneck(snapshot)
     money_proof_mandate = _money_proof_mandate(snapshot, bottleneck)
+    money_proof_health = _money_proof_health(money_proof_mandate)
     with _session() as session:
         latest = session.execute(
             select(AcquisitionEvent)
@@ -1289,6 +1367,7 @@ def relay_success_status() -> dict[str, Any]:
         "bottleneck": bottleneck,
         "next_action": _next_action(bottleneck),
         "money_proof_mandate": money_proof_mandate,
+        "money_proof_health": money_proof_health,
         "snapshot": snapshot,
         "latest_tick": {
             "created_at": latest.created_at.isoformat(),
