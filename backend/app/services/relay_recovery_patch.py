@@ -481,6 +481,18 @@ def _active_sample_tick_proof_state(expected_delta: int, actual_delta: int) -> s
     return "missed"
 
 
+def _success_control_after_outreach_decision(
+    *,
+    sent_this_tick: int,
+    active_sample_tick_proof_state: str,
+) -> tuple[str, str]:
+    if sent_this_tick > 0:
+        return "outreach_sent", "after_outreach_send"
+    if active_sample_tick_proof_state in {"missed", "partial"}:
+        return "active_sample_tick_shortfall", "after_expected_send_shortfall"
+    return "no_outreach_sent", "after_outreach_send"
+
+
 def _success_control_requires_status_refresh(result: Any) -> tuple[bool, str]:
     if not isinstance(result, dict):
         return False, ""
@@ -1531,14 +1543,6 @@ async def _relay_money_loop_tick(
         }
         post_refill_outreach_result = None
     sent_this_tick = _outreach_sent_count(outreach_result) + _outreach_sent_count(post_refill_outreach_result)
-    if send_live and sent_this_tick > 0:
-        success_control_after_outreach = await _run_success_control_tick_for_phase("after_outreach_send")
-    else:
-        success_control_after_outreach = {
-            "status": "skipped",
-            "reason": "no_outreach_sent",
-            "phase": "after_outreach_send",
-        }
     final_status_after = _compact_status_for_loop(await asyncio.to_thread(outreach.outreach_status))
     active_sample_sends_after = int(final_status_after.get("active_experiment_sends") or 0)
     active_sample_target_after = int(
@@ -1549,13 +1553,28 @@ async def _relay_money_loop_tick(
         active_sample_expected_delta_this_tick,
         active_sample_delta_this_tick,
     )
+    success_control_after_reason, success_control_after_phase = _success_control_after_outreach_decision(
+        sent_this_tick=sent_this_tick,
+        active_sample_tick_proof_state=active_sample_tick_proof_state,
+    )
+    if send_live and success_control_after_reason != "no_outreach_sent":
+        success_control_after_outreach = await _run_success_control_tick_for_phase(success_control_after_phase)
+    else:
+        success_control_after_outreach = {
+            "status": "skipped",
+            "reason": success_control_after_reason,
+            "phase": success_control_after_phase,
+        }
     result = {
         "refill_result": refill_result,
         "outreach_result": outreach_result,
         "post_refill_outreach_result": post_refill_outreach_result,
         "success_control": success_control,
         "success_control_after_outreach": success_control_after_outreach,
-        "success_control_phase": "after_outreach_send" if sent_this_tick > 0 else "before_outreach",
+        "success_control_phase": success_control_after_phase
+        if success_control_after_reason != "no_outreach_sent"
+        else "before_outreach",
+        "success_control_after_reason": success_control_after_reason,
         "sent_this_tick": sent_this_tick,
         "direct_due_before": direct_due,
         "active_sample_sends_before": active_sample_sends_before,

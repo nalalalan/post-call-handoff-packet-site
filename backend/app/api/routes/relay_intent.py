@@ -1186,6 +1186,7 @@ def _compact_money_loop_payload(payload: dict[str, Any] | None) -> dict[str, Any
         "success_control_after_conversion_sent": success_after_conversion.get("sent_count"),
         "success_control_after_conversion_failures": success_after_conversion.get("failure_count"),
         "success_control_phase": payload.get("success_control_phase"),
+        "success_control_after_reason": payload.get("success_control_after_reason"),
         "status_after": {
             "active_experiment_variant": status_after.get("active_experiment_variant"),
             "active_experiment_sends": status_after.get("active_experiment_sends"),
