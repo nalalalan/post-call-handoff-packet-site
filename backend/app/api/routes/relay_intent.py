@@ -910,6 +910,7 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
                     "active_experiment_new_due_count": outreach.get("active_experiment_new_due_count"),
                     "direct_due_count": outreach.get("direct_due_count"),
                     "cap_remaining": outreach.get("cap_remaining"),
+                    "effective_daily_cap": outreach.get("effective_daily_cap"),
                     "send_window_is_open": outreach.get("send_window_is_open"),
                     "next_money_move": outreach.get("next_money_move"),
                 },
