@@ -167,7 +167,7 @@
     }
 
     .panel {
-      border-radius: 20px;
+      border-radius: 10px;
       padding: 18px;
     }
 
@@ -219,7 +219,7 @@
     .readout {
       min-width: 0;
       padding: 13px 14px;
-      border-radius: 16px;
+      border-radius: 8px;
       border: 1px solid rgba(34,48,66,0.9);
       background: rgba(255,255,255,0.028);
     }
@@ -310,10 +310,55 @@
       position: relative;
       overflow: hidden;
       min-height: 236px;
-      border-radius: 20px;
+      border-radius: 10px;
       padding: 18px;
       display: grid;
       gap: 12px;
+    }
+
+    .details-shell {
+      border: 1px solid rgba(34, 48, 66, 0.82);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.018);
+      overflow: hidden;
+    }
+
+    .details-shell summary {
+      min-height: 52px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 820;
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .details-shell summary::-webkit-details-marker { display: none; }
+
+    .details-shell summary::after {
+      content: "+";
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(244,241,234,0.12);
+      color: var(--text);
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .details-shell[open] summary::after { content: "-"; }
+
+    .details-content {
+      display: grid;
+      gap: 14px;
+      padding: 0 14px 14px;
     }
 
     .trend-top {
@@ -366,7 +411,7 @@
     .signal-item {
       padding: 12px 13px;
       border: 1px solid rgba(34,48,66,0.82);
-      border-radius: 15px;
+      border-radius: 8px;
       background: rgba(255,255,255,0.025);
       display: grid;
       gap: 5px;
@@ -406,7 +451,7 @@
     .quiet-card {
       min-width: 0;
       border: 1px solid rgba(34,48,66,0.82);
-      border-radius: 16px;
+      border-radius: 8px;
       background: rgba(255,255,255,0.025);
       padding: 14px;
     }
@@ -436,7 +481,7 @@
     .gate-card {
       width: min(430px, 100%);
       border: 1px solid rgba(34,48,66,0.9);
-      border-radius: 22px;
+      border-radius: 10px;
       padding: 22px;
       background: linear-gradient(180deg, rgba(20,30,41,0.98), rgba(15,21,29,0.98));
       box-shadow: var(--shadow);
@@ -599,91 +644,96 @@
       </section>
     </main>
 
-    <section class="trend-grid" aria-label="Trends">
-      <article class="trend-card">
-        <div class="trend-top">
-          <div>
-            <div class="eyebrow">Money</div>
-            <h3>Last 7 days</h3>
-          </div>
-          <span class="mini-pill" id="moneyTrendPill">flat</span>
-        </div>
-        <div class="trend-value" id="moneyTrendValue">$0</div>
-        <div class="trend-note" id="moneyTrendNote">No pattern yet.</div>
-        <svg class="sparkline" id="moneySpark" viewBox="0 0 240 70" preserveAspectRatio="none" aria-hidden="true"></svg>
-      </article>
+    <details class="details-shell">
+      <summary>Open proof and recent activity</summary>
+      <div class="details-content">
+        <section class="trend-grid" aria-label="Trends">
+          <article class="trend-card">
+            <div class="trend-top">
+              <div>
+                <div class="eyebrow">Money</div>
+                <h3>Last 7 days</h3>
+              </div>
+              <span class="mini-pill" id="moneyTrendPill">flat</span>
+            </div>
+            <div class="trend-value" id="moneyTrendValue">$0</div>
+            <div class="trend-note" id="moneyTrendNote">No pattern yet.</div>
+            <svg class="sparkline" id="moneySpark" viewBox="0 0 240 70" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </article>
 
-      <article class="trend-card">
-        <div class="trend-top">
-          <div>
-            <div class="eyebrow">Replies</div>
-            <h3>Last 7 days</h3>
-          </div>
-          <span class="mini-pill" id="replyTrendPill">flat</span>
-        </div>
-        <div class="trend-value" id="replyTrendValue">0</div>
-        <div class="trend-note" id="replyTrendNote">No pattern yet.</div>
-        <svg class="sparkline" id="replySpark" viewBox="0 0 240 70" preserveAspectRatio="none" aria-hidden="true"></svg>
-      </article>
+          <article class="trend-card">
+            <div class="trend-top">
+              <div>
+                <div class="eyebrow">Replies</div>
+                <h3>Last 7 days</h3>
+              </div>
+              <span class="mini-pill" id="replyTrendPill">flat</span>
+            </div>
+            <div class="trend-value" id="replyTrendValue">0</div>
+            <div class="trend-note" id="replyTrendNote">No pattern yet.</div>
+            <svg class="sparkline" id="replySpark" viewBox="0 0 240 70" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </article>
 
-      <article class="trend-card">
-        <div class="trend-top">
-          <div>
-            <div class="eyebrow">Sends</div>
-            <h3>Last 7 days</h3>
-          </div>
-          <span class="mini-pill" id="sendTrendPill">flat</span>
-        </div>
-        <div class="trend-value" id="sendTrendValue">0</div>
-        <div class="trend-note" id="sendTrendNote">No pattern yet.</div>
-        <svg class="sparkline" id="sendSpark" viewBox="0 0 240 70" preserveAspectRatio="none" aria-hidden="true"></svg>
-      </article>
-    </section>
+          <article class="trend-card">
+            <div class="trend-top">
+              <div>
+                <div class="eyebrow">Sends</div>
+                <h3>Last 7 days</h3>
+              </div>
+              <span class="mini-pill" id="sendTrendPill">flat</span>
+            </div>
+            <div class="trend-value" id="sendTrendValue">0</div>
+            <div class="trend-note" id="sendTrendNote">No pattern yet.</div>
+            <svg class="sparkline" id="sendSpark" viewBox="0 0 240 70" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </article>
+        </section>
 
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <div class="eyebrow">Signals</div>
-          <h3>Small details worth noticing</h3>
-        </div>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="eyebrow">Signals</div>
+              <h3>Small details worth noticing</h3>
+            </div>
+          </div>
+          <div class="quiet-panel">
+            <div class="quiet-card">
+              <div class="eyebrow">Inbox mix</div>
+              <div class="v" id="inboxMix">--</div>
+            </div>
+            <div class="quiet-card">
+              <div class="eyebrow">Sender split</div>
+              <div class="v" id="senderSplit">--</div>
+            </div>
+            <div class="quiet-card">
+              <div class="eyebrow">Reply mailbox</div>
+              <div class="v" id="replyMailbox">--</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="lower-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="eyebrow">Recent replies</div>
+                <h3>Fresh human signal</h3>
+              </div>
+            </div>
+            <div class="signal-list" id="recentReplies"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="eyebrow">Recent sends</div>
+                <h3>Latest outreach</h3>
+              </div>
+            </div>
+            <div class="signal-list" id="recentSends"></div>
+          </article>
+        </section>
       </div>
-      <div class="quiet-panel">
-        <div class="quiet-card">
-          <div class="eyebrow">Inbox mix</div>
-          <div class="v" id="inboxMix">--</div>
-        </div>
-        <div class="quiet-card">
-          <div class="eyebrow">Sender split</div>
-          <div class="v" id="senderSplit">--</div>
-        </div>
-        <div class="quiet-card">
-          <div class="eyebrow">Reply mailbox</div>
-          <div class="v" id="replyMailbox">--</div>
-        </div>
-      </div>
-    </section>
-
-    <section class="lower-grid">
-      <article class="panel">
-        <div class="panel-head">
-          <div>
-            <div class="eyebrow">Recent replies</div>
-            <h3>Fresh human signal</h3>
-          </div>
-        </div>
-        <div class="signal-list" id="recentReplies"></div>
-      </article>
-
-      <article class="panel">
-        <div class="panel-head">
-          <div>
-            <div class="eyebrow">Recent sends</div>
-            <h3>Latest outreach</h3>
-          </div>
-        </div>
-        <div class="signal-list" id="recentSends"></div>
-      </article>
-    </section>
+    </details>
   </div>
 
   <script>
@@ -778,6 +828,12 @@
 
     function stateText(value) {
       return String(value || "").replace(/_/g, " ");
+    }
+
+    function sentence(value) {
+      const text = String(value || "").trim();
+      if (!text) return "";
+      return /[.!?]$/.test(text) ? text : `${text}.`;
     }
 
     function nextBoundary(minutes, fromDate = new Date()) {
@@ -1099,9 +1155,12 @@
       let copy = "No urgent spike right now. Watch replies first, then money, then whether the queue is building.";
 
       if (operator?.doNotInterrupt) {
-        headline = "Stay out. Relay is handling it.";
+        const readableState = stateText(operator.readinessState || operator.mode);
+        headline = readableState.includes("ready")
+          ? "Ready. The next move is queued."
+          : "Stay out. Relay is handling it.";
         const next = fmtMoment(operator.nextWindow);
-        const readiness = operator.readinessReason ? `${operator.readinessReason}.` : "";
+        const readiness = sentence(operator.readinessReason || operator.reason || "Relay is operating autonomously");
         const progress = operator.activeProgress ? ` Active sample: ${operator.activeProgress}.` : "";
         const proof = operator.nextWindowSuccessCriterion
           ? ` Next proof: ${operator.nextWindowSuccessCriterion}.`
@@ -1112,24 +1171,7 @@
         const moneyTarget = objective.weekly_target_usd
           ? ` Money target: ${fmtMoney(objective.weekly_target_usd)} week${paidLeft !== undefined ? `; ${paidLeft} paid tests left` : ""}.`
           : "";
-        const replyContract = operator.replyAutonomyContract || {};
-        const replyHandling = replyContract.reply_autoclose_mode
-          ? ` Replies: ${replyContract.state || "idle"}; ${replyContract.interrupt_condition || "interrupt only for unhandled buyer signal"}.`
-          : "";
-        const governor = operator.successGovernor || {};
-        const governorLine = governor.state
-          ? ` Governor: ${governor.state}; ${governor.next_step || governor.human_policy || ""}.`
-          : "";
-        const ladder = operator.conversionLadder || {};
-        const ladderLine = ladder.state
-          ? ` Ladder: ${ladder.active_stage || ladder.state}; ${ladder.next_step || ""}.`
-          : "";
-        const ownerContract = operator.ownerAbsenceContract || {};
-        const ownerLine = ownerContract.state
-          ? ` You: ${ownerContract.manual_input_required ? "needed" : "out of loop"}${ownerContract.autonomous_until ? ` until ${fmtMoment(ownerContract.autonomous_until)}` : ""}.`
-          : "";
-        const success = !operator.nextWindowSuccessCriterion && operator.successMetric ? ` Success metric: ${operator.successMetric}.` : "";
-        copy = `${readiness || operator.reason}${next ? ` Next autonomous window: ${next}.` : ""}${progress}${proof}${audit}${moneyTarget}${replyHandling}${governorLine}${ladderLine}${ownerLine}${success}`;
+        copy = `${readiness}${next ? ` Next autonomous window: ${next}.` : ""}${progress}${proof}${moneyTarget}${audit}`;
       } else if (operator && !operator.doNotInterrupt) {
         headline = "Attention needed.";
         copy = operator.reason || operator.planSummary || "There is a real signal worth handling before the system keeps scaling.";
@@ -1167,7 +1209,7 @@
       $("todayReplies").textContent = String(status.replies_today ?? 0);
       $("sendRhythm").textContent = operator.label;
       $("rhythmCopy").textContent = operator.doNotInterrupt
-        ? (operator.interruptRule || operator.reason)
+        ? "No manual move is useful right now. Let the next window run."
         : "Handle the real signal first. Do not tune volume until that is done.";
       if (!operator.reason) {
         $("rhythmCopy").textContent = rhythm.label === "Moving"
