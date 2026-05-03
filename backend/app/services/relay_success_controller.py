@@ -413,6 +413,11 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def _experiment_failure_sample() -> int:
+    min_sample = _int_env("RELAY_EXPERIMENT_MIN_SAMPLE", 20)
+    return max(1, _int_env("RELAY_EXPERIMENT_FAILURE_SAMPLE", min_sample))
+
+
 def relay_success_snapshot(days: int = 7) -> dict[str, Any]:
     days = max(1, min(int(days), 90))
     now = _now()
@@ -519,7 +524,7 @@ def _bottleneck(snapshot: dict[str, Any]) -> str:
         return "page_to_lead"
     if int(intent.get("page_views") or 0) < 20 and int(outreach.get("sends") or 0) < 20:
         return "traffic"
-    if int(outreach.get("sends") or 0) >= 30 and int(outreach.get("replies") or 0) == 0:
+    if int(outreach.get("sends") or 0) >= _experiment_failure_sample() and int(outreach.get("replies") or 0) == 0:
         return "outbound_targeting_or_copy"
     if int(outreach.get("due_now") or 0) == 0 and int(outreach.get("cap_remaining") or 0) > 0:
         return "lead_refill"
@@ -546,11 +551,11 @@ def _run_outbound_experiment_review_if_needed(bottleneck: str, snapshot: dict[st
     if bottleneck != "outbound_targeting_or_copy":
         return {"status": "skipped", "summary": "outbound experiment review not needed for this bottleneck"}
 
-    min_sample = _int_env("RELAY_EXPERIMENT_MIN_SAMPLE", 20)
+    failure_sample = _experiment_failure_sample()
     sends = int(snapshot.get("outreach", {}).get("sends") or 0)
     replies = int(snapshot.get("outreach", {}).get("replies") or 0)
     payments = int(snapshot.get("money", {}).get("payments") or 0)
-    if sends < max(30, min_sample):
+    if sends < failure_sample:
         return {"status": "skipped", "summary": "outbound sample is not large enough to rotate yet"}
     if replies > 0 or payments > 0:
         return {"status": "skipped", "summary": "signal exists; keep the current outbound lane stable"}
@@ -569,7 +574,7 @@ def _run_outbound_experiment_review_if_needed(bottleneck: str, snapshot: dict[st
     active_sends = int(active_signal.get("sends") or 0)
     active_replies = int(active_signal.get("replies") or 0)
     active_payments = int(active_signal.get("payments") or 0)
-    if active_sends < max(30, min_sample):
+    if active_sends < failure_sample:
         return {
             "status": "skipped",
             "summary": "active experiment still needs its own measurable send sample",
@@ -577,6 +582,7 @@ def _run_outbound_experiment_review_if_needed(bottleneck: str, snapshot: dict[st
             "active_experiment_sends": active_sends,
             "active_experiment_replies": active_replies,
             "aggregate_sends": sends,
+            "failure_sample": failure_sample,
         }
     if active_replies > 0 or active_payments > 0:
         return {
@@ -597,6 +603,7 @@ def _run_outbound_experiment_review_if_needed(bottleneck: str, snapshot: dict[st
         "previous_experiment_variant": active_variant,
         "previous_experiment_sends": active_sends,
         "previous_experiment_replies": active_replies,
+        "failure_sample": failure_sample,
         "experiment_variant": plan.get("experiment_variant"),
         "experiment_label": plan.get("experiment_label"),
         "decision_reasons": plan.get("decision_reasons", []),
