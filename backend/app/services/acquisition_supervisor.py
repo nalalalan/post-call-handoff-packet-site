@@ -709,12 +709,20 @@ def _clean_reply_text(s: str) -> str:
 
 
 def _zero_touch_reply() -> str:
+    offers = [("one live packet ($40)", settings.packet_checkout_url)]
+    seen = {settings.packet_checkout_url}
+    for label, url in [
+        ("5-call sprint ($750)", getattr(settings, "packet_5_pack_url", "")),
+        ("done-for-you week ($3000)", getattr(settings, "weekly_sprint_url", "")),
+        ("done-for-you month ($7500)", getattr(settings, "monthly_autopilot_url", "")),
+    ]:
+        if url and url not in seen:
+            offers.append((label, url))
+            seen.add(url)
+    offer_block = "\n\n".join(f"{label}:\n{url}" for label, url in offers)
     return _clean_reply_text(
         "totally - pick whichever is the best fit\n\n"
-        f"one live packet ($40):\n{settings.packet_checkout_url}\n\n"
-        f"5-call sprint ($750):\n{getattr(settings, 'packet_5_pack_url', '') or settings.packet_checkout_url}\n\n"
-        f"done-for-you week ($3000):\n{getattr(settings, 'weekly_sprint_url', '') or settings.packet_checkout_url}\n\n"
-        f"done-for-you month ($7500):\n{getattr(settings, 'monthly_autopilot_url', '') or settings.packet_checkout_url}\n\n"
+        f"{offer_block}\n\n"
         "after checkout, intake opens automatically"
     )
 

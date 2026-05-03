@@ -425,6 +425,15 @@ def _env_snapshot() -> dict[str, bool]:
         "STRIPE_WEBHOOK_SECRET": bool(settings.stripe_webhook_secret),
         "TALLY_WEBHOOK_SECRET": bool(settings.tally_webhook_secret),
         "PACKET_CHECKOUT_URL": bool(settings.packet_checkout_url),
+        "PACKET_5_PACK_URL": bool(
+            os.getenv("PACKET_5_PACK_URL", "").strip() or getattr(settings, "packet_5_pack_url", "")
+        ),
+        "WEEKLY_SPRINT_URL": bool(
+            os.getenv("WEEKLY_SPRINT_URL", "").strip() or getattr(settings, "weekly_sprint_url", "")
+        ),
+        "MONTHLY_AUTOPILOT_URL": bool(
+            os.getenv("MONTHLY_AUTOPILOT_URL", "").strip() or getattr(settings, "monthly_autopilot_url", "")
+        ),
         "CLIENT_INTAKE_DESTINATION": bool(settings.client_intake_destination or os.getenv("CLIENT_INTAKE_URL", "").strip()),
         "FROM_EMAIL_FULFILLMENT": bool(settings.from_email_fulfillment),
         "APOLLO_API_KEY": bool(settings.apollo_api_key),

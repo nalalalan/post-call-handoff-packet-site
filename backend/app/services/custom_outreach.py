@@ -409,7 +409,11 @@ def _in_send_window() -> bool:
 
 
 def _packet_5_pack_url() -> str:
-    return getattr(settings, "packet_5_pack_url", "") or settings.packet_checkout_url
+    return (
+        os.getenv("PACKET_5_PACK_URL", "").strip()
+        or getattr(settings, "packet_5_pack_url", "")
+        or settings.packet_checkout_url
+    )
 
 
 def _weekly_sprint_url() -> str:
@@ -421,7 +425,11 @@ def _weekly_sprint_url() -> str:
 
 
 def _monthly_autopilot_url() -> str:
-    return getattr(settings, "monthly_autopilot_url", "") or settings.packet_checkout_url
+    return (
+        os.getenv("MONTHLY_AUTOPILOT_URL", "").strip()
+        or getattr(settings, "monthly_autopilot_url", "")
+        or settings.packet_checkout_url
+    )
 
 
 def _landing_page_url() -> str:

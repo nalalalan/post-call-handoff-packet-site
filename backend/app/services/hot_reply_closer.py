@@ -36,9 +36,18 @@ def _ladder_block() -> str:
     offers = [("one live packet ($40)", packet)]
     seen = {packet}
     candidates = [
-        ("5-call sprint ($750)", os.getenv("PACKET_5_PACK_URL", "").strip()),
-        ("done-for-you week ($3000)", os.getenv("WEEKLY_SPRINT_URL", "").strip()),
-        ("done-for-you month ($7500)", os.getenv("MONTHLY_AUTOPILOT_URL", "").strip()),
+        (
+            "5-call sprint ($750)",
+            os.getenv("PACKET_5_PACK_URL", "").strip() or getattr(settings, "packet_5_pack_url", ""),
+        ),
+        (
+            "done-for-you week ($3000)",
+            os.getenv("WEEKLY_SPRINT_URL", "").strip() or getattr(settings, "weekly_sprint_url", ""),
+        ),
+        (
+            "done-for-you month ($7500)",
+            os.getenv("MONTHLY_AUTOPILOT_URL", "").strip() or getattr(settings, "monthly_autopilot_url", ""),
+        ),
     ]
     for label, url in candidates:
         if url and url not in seen:

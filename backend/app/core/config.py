@@ -57,6 +57,9 @@ class Settings(BaseSettings):
 
     packet_offer_name: str = "One live packet - $40"
     packet_checkout_url: str = "https://buy.stripe.com/bJeaEZb4mf6de64dSi2Nq02"
+    packet_5_pack_url: str = ""
+    weekly_sprint_url: str = ""
+    monthly_autopilot_url: str = ""
     client_intake_destination: str = ""
     ops_admin_token: str = ""
 
