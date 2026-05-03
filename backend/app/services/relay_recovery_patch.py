@@ -744,20 +744,48 @@ def _apify_refill_query_candidates(primary_query: str | None) -> list[str]:
         pass
     for query in os.getenv("ACQ_OPS_QUERY_ROTATION", "").split("|"):
         add_category_variants(query)
-    for query in [
-        "paid media agency new york",
-        "paid media agency los angeles",
-        "google ads agency chicago",
-        "ppc agency denver",
-        "performance marketing agency austin",
-        "paid social agency atlanta",
-        "meta ads agency dallas",
-        "b2b marketing agency boston",
-        "ecommerce marketing agency san diego",
-        "digital marketing agency seattle",
-    ]:
-        add(query)
+    cities = [
+        "new york",
+        "los angeles",
+        "chicago",
+        "austin",
+        "denver",
+        "atlanta",
+        "dallas",
+        "boston",
+        "san diego",
+        "seattle",
+        "miami",
+        "phoenix",
+        "minneapolis",
+        "charlotte",
+        "nashville",
+    ]
+    categories = [
+        "paid media agency",
+        "google ads agency",
+        "ppc agency",
+        "performance marketing agency",
+        "paid social agency",
+        "meta ads agency",
+        "b2b marketing agency",
+        "ecommerce marketing agency",
+        "digital marketing agency",
+    ]
+    for index, city in enumerate(cities):
+        add(f"{categories[index % len(categories)]} {city}")
     return candidates
+
+
+def _rotate_query_candidates(candidates: list[str], *, page_size: int) -> list[str]:
+    if not candidates:
+        return []
+    try:
+        tick = int(_money_loop_state.get("ticks") or 0)
+    except Exception:
+        tick = 0
+    offset = (tick * max(page_size, 1)) % len(candidates)
+    return candidates[offset:] + candidates[:offset]
 
 
 def _compact_refill_attempt(result: dict[str, Any]) -> dict[str, Any]:
@@ -1259,7 +1287,11 @@ async def _relay_money_loop_tick(
                     fallback_limit = max(int(os.getenv("AO_RELAY_APIFY_FALLBACK_QUERY_ATTEMPTS", "4") or 4), 1)
                 except Exception:
                     fallback_limit = 4
-                for fallback_query in _apify_refill_query_candidates(query)[:fallback_limit]:
+                fallback_queries = _rotate_query_candidates(
+                    _apify_refill_query_candidates(query),
+                    page_size=fallback_limit,
+                )
+                for fallback_query in fallback_queries[:fallback_limit]:
                     previous_refill_status = latest_refill_status
                     try:
                         apify_timeout = _apify_fallback_timeout_seconds()
