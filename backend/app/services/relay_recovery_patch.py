@@ -1683,7 +1683,7 @@ def _money_loop_success_sleep(result: dict[str, Any] | None, default_interval: i
         return min(default_interval, 120), "paid_fulfillment_watch"
     if bottleneck == "paid_signal_keep_stable":
         return min(default_interval, 300), "paid_lane_stability_watch"
-    if bottleneck in {"checkout_to_payment", "reply_to_payment"}:
+    if bottleneck in {"checkout_to_payment", "reply_to_payment", "active_signal_to_payment"}:
         return min(default_interval, 120), "buyer_signal_watch"
     if bottleneck in {
         "active_sample_execution_missed",
@@ -1702,7 +1702,13 @@ def _money_loop_success_sleep(result: dict[str, Any] | None, default_interval: i
             else {}
         )
         health_state = str(proof_health.get("state") or "").strip()
-        if health_state in {"paid_fulfillment_open", "execution_proof_missed", "recovery_required", "buyer_signal_open"}:
+        if health_state in {
+            "paid_fulfillment_open",
+            "execution_proof_missed",
+            "recovery_required",
+            "buyer_signal_open",
+            "active_signal_open",
+        }:
             return min(default_interval, 120), "money_proof_recovery_watch"
         if health_state == "winning_lane_active":
             return min(default_interval, 300), "winning_lane_watch"

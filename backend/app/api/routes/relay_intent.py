@@ -387,6 +387,10 @@ def _success_governor_contract(
         blockers = launch_readiness.get("blockers") if isinstance(launch_readiness.get("blockers"), list) else []
         next_step = "; ".join(str(item) for item in blockers) or window_contract.get("failure_condition") or "remove launch blocker"
         human_policy = "interrupt only if the blocker cannot be cleared autonomously"
+    elif money_state == "buyer_signal_close":
+        state = "close_buyer_signal"
+        next_step = money_decision.get("next_action") or "close buyer signal through the paid test"
+        human_policy = "stay out unless buyer signal cannot be handled automatically"
     elif money_state == "rotate_one_variable":
         state = "rotate_experiment"
         next_step = money_decision.get("next_action") or "rotate one controlled variable"

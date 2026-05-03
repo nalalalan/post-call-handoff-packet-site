@@ -989,6 +989,8 @@ def _bottleneck(snapshot: dict[str, Any]) -> str:
         return "reply_to_payment"
     if int(money.get("payments") or 0) > 0:
         return "paid_signal_keep_stable"
+    if active_replies > active_payments:
+        return "active_signal_to_payment"
     if _active_sample_execution_proof_missed(outreach, active_sends):
         return "active_sample_execution_missed"
     if (
@@ -1031,6 +1033,7 @@ def _next_action(bottleneck: str) -> str:
         "sample_to_notes": "Send the sample-to-notes follow-up.",
         "checkout_to_payment": "Keep notes-first friction low and make the paid test obvious after interest.",
         "reply_to_payment": "Close real replies through the paid next step before changing traffic or copy.",
+        "active_signal_to_payment": "Keep the active lane stable and convert active replies to checkout or payment.",
         "outbound_send_failed": (
             "Sender failed today before any email was sent; use SMTP failover details "
             "and fix the sending lane before judging demand."
@@ -1099,6 +1102,10 @@ def _money_proof_mandate(snapshot: dict[str, Any], bottleneck: str) -> dict[str,
         state = "close_buyer_reply"
         primary_action = "close real replies through the paid next step before changing traffic or copy"
         owner_policy = "manual_input_required"
+    elif bottleneck == "active_signal_to_payment":
+        state = "convert_active_signal"
+        primary_action = "keep the active lane stable and convert active replies to checkout or payment before changing copy or target"
+        owner_policy = "owner_out_of_loop"
     elif payments > 0 or bottleneck == "paid_signal_keep_stable":
         state = "protect_winning_lane"
         primary_action = "keep the paid lane stable and continue only controlled tests that do not disturb fulfillment"
@@ -1204,6 +1211,10 @@ def _money_proof_health(mandate: dict[str, Any]) -> dict[str, Any]:
         health = "money_proof_satisfied"
         reason = "payment exists"
         recovery = "keep the paid lane stable"
+    elif state == "convert_active_signal":
+        health = "active_signal_open"
+        reason = "active sample has buyer signal ahead of payment"
+        recovery = "keep the active lane stable and convert replies to checkout or payment"
     elif checkout_gap > 0 or unhandled_replies > 0:
         health = "buyer_signal_open"
         reason = "buyer signal is ahead of payment"
