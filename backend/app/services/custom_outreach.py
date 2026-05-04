@@ -515,9 +515,15 @@ def _monthly_autopilot_url() -> str:
 
 def _landing_page_url() -> str:
     url = os.getenv("LANDING_PAGE_URL", "").strip() or getattr(settings, "landing_page_url", "").strip()
-    if not url or "nalalalan.github.io/alan-operator-site" in url:
-        return "https://relay.aolabs.io"
-    return url.rstrip("/")
+    normalized = url.rstrip("/")
+    lower_url = normalized.lower()
+    if (
+        not normalized
+        or "nalalalan.github.io/alan-operator-site" in lower_url
+        or lower_url in {"https://relay.aolabs.io", "http://relay.aolabs.io"}
+    ):
+        return "http://relaybrief.com"
+    return normalized
 
 
 def _sample_url() -> str:
