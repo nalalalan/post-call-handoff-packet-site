@@ -750,13 +750,25 @@ def _run_intake_smoke_check_if_needed() -> dict[str, Any]:
         }
 
 
+def _normalize_public_offer_url(url: str) -> str:
+    normalized = (url or "").strip().rstrip("/")
+    lower_url = normalized.lower()
+    if (
+        not normalized
+        or "nalalalan.github.io/alan-operator-site" in lower_url
+        or lower_url in {"https://relay.aolabs.io", "http://relay.aolabs.io"}
+    ):
+        return "http://relaybrief.com"
+    return normalized
+
+
 def _outbound_smoke_urls(outreach_service: Any) -> dict[str, str]:
-    landing_page_url = (
+    landing_page_url = _normalize_public_offer_url(
         getattr(outreach_service, "_landing_page_url", lambda: "")()
         or os.getenv("LANDING_PAGE_URL", "").strip()
         or getattr(settings, "landing_page_url", "").strip()
         or "https://relay.aolabs.io"
-    ).rstrip("/")
+    )
     packet_checkout_url = str(settings.packet_checkout_url or "").strip()
     return {
         "packet_checkout_url": packet_checkout_url,
