@@ -2352,6 +2352,39 @@ def _conversion_action_summary(actions: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _run_success_control_action(name: str, callback: Any) -> dict[str, Any]:
+    try:
+        result = callback()
+        if isinstance(result, dict):
+            return result
+        return {
+            "status": "ok",
+            "summary": "success control action returned a non-dict result",
+            "value": str(result)[:500],
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "reason": f"{name}_failed",
+            "error_type": type(exc).__name__,
+            "error": str(exc)[:1000],
+        }
+
+
+def _success_control_action_failures(actions: dict[str, Any]) -> dict[str, Any]:
+    failures: dict[str, Any] = {}
+    for name, result in actions.items():
+        if not isinstance(result, dict):
+            continue
+        if str(result.get("status") or "").strip() == "error":
+            failures[name] = {
+                "reason": result.get("reason") or result.get("summary") or "action_error",
+                "error_type": result.get("error_type"),
+                "error": result.get("error"),
+            }
+    return failures
+
+
 def run_relay_success_control_tick() -> dict[str, Any]:
     before = relay_success_snapshot(days=7)
     bottleneck = _bottleneck(before)
@@ -2359,28 +2392,49 @@ def run_relay_success_control_tick() -> dict[str, Any]:
     before_money_proof_health = _money_proof_health(before_money_proof_mandate)
 
     actions: dict[str, Any] = {}
-    actions["intake_smoke_check"] = _run_intake_smoke_check_if_needed()
-    actions["delivery_smoke_check"] = _run_delivery_smoke_check_if_needed()
-    actions["outbound_smoke_check"] = _run_outbound_smoke_check_if_needed()
-    actions["public_offer_smoke_check"] = _run_public_offer_smoke_check_if_needed()
-    actions["reply_autoclose_smoke_check"] = _run_reply_autoclose_smoke_check_if_needed()
-    actions["payment_webhook_smoke_check"] = _run_payment_webhook_smoke_check_if_needed()
-    actions["inbound_conversion"] = run_inbound_conversion_sweep()
-    actions["paid_intake_reminders"] = run_paid_intake_reminder_sweep(
-        hours=int(os.getenv("OPS_INTAKE_REMINDER_HOURS", "12") or "12")
+    actions["intake_smoke_check"] = _run_success_control_action(
+        "intake_smoke_check", _run_intake_smoke_check_if_needed
     )
-    actions["post_delivery_upsell"] = run_post_delivery_upsell_sweep(
-        hours=int(os.getenv("OPS_UPSELL_DELAY_HOURS", "24") or "24")
+    actions["delivery_smoke_check"] = _run_success_control_action(
+        "delivery_smoke_check", _run_delivery_smoke_check_if_needed
     )
-    actions["outbound_experiment_review"] = _run_outbound_experiment_review_if_needed(bottleneck, before)
+    actions["outbound_smoke_check"] = _run_success_control_action(
+        "outbound_smoke_check", _run_outbound_smoke_check_if_needed
+    )
+    actions["public_offer_smoke_check"] = _run_success_control_action(
+        "public_offer_smoke_check", _run_public_offer_smoke_check_if_needed
+    )
+    actions["reply_autoclose_smoke_check"] = _run_success_control_action(
+        "reply_autoclose_smoke_check", _run_reply_autoclose_smoke_check_if_needed
+    )
+    actions["payment_webhook_smoke_check"] = _run_success_control_action(
+        "payment_webhook_smoke_check", _run_payment_webhook_smoke_check_if_needed
+    )
+    actions["inbound_conversion"] = _run_success_control_action("inbound_conversion", run_inbound_conversion_sweep)
+    actions["paid_intake_reminders"] = _run_success_control_action(
+        "paid_intake_reminders",
+        lambda: run_paid_intake_reminder_sweep(
+            hours=int(os.getenv("OPS_INTAKE_REMINDER_HOURS", "12") or "12")
+        ),
+    )
+    actions["post_delivery_upsell"] = _run_success_control_action(
+        "post_delivery_upsell",
+        lambda: run_post_delivery_upsell_sweep(
+            hours=int(os.getenv("OPS_UPSELL_DELAY_HOURS", "24") or "24")
+        ),
+    )
+    actions["outbound_experiment_review"] = _run_success_control_action(
+        "outbound_experiment_review", lambda: _run_outbound_experiment_review_if_needed(bottleneck, before)
+    )
     conversion_actions = _conversion_action_summary(actions)
+    action_failures = _success_control_action_failures(actions)
 
     after = relay_success_snapshot(days=7)
     after_bottleneck = _bottleneck(after)
     money_proof_mandate = _money_proof_mandate(after, after_bottleneck)
     money_proof_health = _money_proof_health(money_proof_mandate)
     result = {
-        "status": "ok",
+        "status": "degraded_ok" if action_failures else "ok",
         "bottleneck": bottleneck,
         "next_action": _next_action(bottleneck),
         "after_bottleneck": after_bottleneck,
@@ -2392,6 +2446,7 @@ def run_relay_success_control_tick() -> dict[str, Any]:
         "bottleneck_changed": after_bottleneck != bottleneck,
         "before": before,
         "actions": actions,
+        "action_failures": action_failures,
         "conversion_actions": conversion_actions,
         "after": after,
         "created_at": _now().isoformat(),
