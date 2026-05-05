@@ -1926,6 +1926,49 @@ def relay_research_journal(days: int = 30, limit: int = 50) -> dict[str, Any]:
         db.close()
 
 
+@router.get("/decision-ledger")
+def relay_decision_ledger(days: int = 30, limit: int = 50) -> dict[str, Any]:
+    days = max(1, min(days, 365))
+    limit = max(1, min(limit, 200))
+    since = datetime.utcnow() - timedelta(days=days)
+
+    db = SessionLocal()
+    try:
+        events = (
+            db.query(AcquisitionEvent)
+            .filter(AcquisitionEvent.event_type == RELAY_RESEARCH_JOURNAL_EVENT)
+            .filter(AcquisitionEvent.created_at >= since)
+            .order_by(AcquisitionEvent.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        entries = []
+        for event in events:
+            payload = _safe_payload(event.payload_json)
+            ledger = payload.get("decision_ledger") if isinstance(payload, dict) else None
+            if not isinstance(ledger, dict):
+                continue
+            entries.append(
+                {
+                    "id": event.id,
+                    "created_at": event.created_at.isoformat() if event.created_at else "",
+                    "source": event.prospect_external_id.replace("relay-research:", "", 1),
+                    "summary": event.summary,
+                    "ledger": ledger,
+                }
+            )
+        return {
+            "ok": True,
+            "days": days,
+            "limit": limit,
+            "event_type": RELAY_RESEARCH_JOURNAL_EVENT,
+            "count": len(entries),
+            "entries": entries,
+        }
+    finally:
+        db.close()
+
+
 @router.get("/ops-check")
 def relay_ops_check(days: int = 14) -> dict[str, Any]:
     days = max(1, min(days, 90))
@@ -1958,6 +2001,7 @@ def relay_ops_check(days: int = 14) -> dict[str, Any]:
             "autopilot_digest_route": "/autopilot/digest",
             "intent_summary_route": "/api/relay/intent-summary",
             "research_journal_route": "/api/relay/research-journal",
+            "decision_ledger_route": "/api/relay/decision-ledger",
         }
 
         event_counts = (

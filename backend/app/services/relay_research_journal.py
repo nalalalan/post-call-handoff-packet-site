@@ -9,7 +9,7 @@ from app.models.acquisition_supervisor import AcquisitionEvent
 
 
 RELAY_RESEARCH_JOURNAL_EVENT = "relay_research_journal_entry"
-RELAY_RESEARCH_JOURNAL_VERSION = "relay-research-journal-v1"
+RELAY_RESEARCH_JOURNAL_VERSION = "relay-research-journal-v2"
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
