@@ -798,7 +798,7 @@ def _normalize_public_offer_url(url: str) -> str:
         or "nalalalan.github.io/alan-operator-site" in lower_url
         or lower_url in {"https://relay.aolabs.io", "http://relay.aolabs.io"}
     ):
-        return "http://relaybrief.com"
+        return "https://relaybrief.com"
     return normalized
 
 
@@ -828,7 +828,11 @@ def _outbound_smoke_urls(outreach_service: Any) -> dict[str, str]:
             or packet_checkout_url
         ),
         "landing_page_url": landing_page_url,
-        "sample_url": getattr(outreach_service, "_sample_url", lambda: landing_page_url + "/sample.pdf")(),
+        "sample_url": getattr(
+            outreach_service,
+            "_sample_url",
+            lambda: "https://raw.githubusercontent.com/nalalalan/relay-live/main/sample.pdf",
+        )(),
         "notes_url": landing_page_url + "/#send-notes",
     }
 

@@ -77,7 +77,10 @@ def _normalize_buyer_payload(payload: dict[str, Any]) -> dict[str, str]:
 
 
 def _sample_pdf_url() -> str:
-    return settings.landing_page_url.rstrip("/") + "/sample_post_call_handoff_packet.pdf"
+    return (
+        getattr(settings, "sample_pdf_url", "")
+        or "https://raw.githubusercontent.com/nalalalan/relay-live/main/sample.pdf"
+    )
 
 
 def _calls_phrase(calls: str) -> str:

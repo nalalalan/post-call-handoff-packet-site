@@ -31,9 +31,17 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _relay_url(path: str = "") -> str:
-    base = (settings.landing_page_url or "https://relay.aolabs.io").rstrip("/")
+    base = (settings.landing_page_url or "https://relaybrief.com").rstrip("/")
     clean_path = path if path.startswith("/") else f"/{path}" if path else ""
     return f"{base}{clean_path}"
+
+
+def _sample_packet_url() -> str:
+    return (
+        os.getenv("RELAY_SAMPLE_URL", "").strip()
+        or os.getenv("SAMPLE_PDF_URL", "").strip()
+        or "https://raw.githubusercontent.com/nalalalan/relay-live/main/sample.pdf"
+    )
 
 
 class RelayIntentEventIn(BaseModel):
@@ -1012,7 +1020,7 @@ def _is_internal_email(email: str | None) -> bool:
 
 
 def _sample_email_html(to_email: str) -> str:
-    sample_url = _relay_url("/sample.pdf")
+    sample_url = _sample_packet_url()
     relay_url = _relay_url()
     checkout_url = settings.packet_checkout_url or "#"
     safe_email = escape(to_email)
@@ -1029,7 +1037,7 @@ def _sample_email_html(to_email: str) -> str:
         <a href="{checkout_url}" style="color:#a05f2f;font-weight:700">Start the $40 relay</a>
       </p>
       <p style="font-size:13px;color:#756961">
-        Sent to {safe_email} from <a href="{relay_url}" style="color:#756961">relay.aolabs.io</a>.
+        Sent to {safe_email} from <a href="{relay_url}" style="color:#756961">relaybrief.com</a>.
       </p>
     </div>
     """.strip()
@@ -1105,7 +1113,7 @@ def _send_messy_notes_email(payload: RelayIntentLeadIn, email: str, score: int) 
 
 
 def _messy_notes_customer_email_html(to_email: str) -> str:
-    sample_url = _relay_url("/sample.pdf")
+    sample_url = _sample_packet_url()
     notes_url = _relay_url("/#send-notes")
     checkout_url = settings.packet_checkout_url or "#"
     safe_email = escape(to_email)

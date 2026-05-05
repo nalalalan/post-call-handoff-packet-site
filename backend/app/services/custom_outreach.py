@@ -252,8 +252,7 @@ STEP_TEMPLATE_VARIANTS: dict[str, list[StepTemplate]] = {
                 "If {company_name} has one sales or client call where the follow-up is stuck in rough notes, I can turn it into the client-ready recap, follow-up draft, next steps, and CRM-ready update for $40.\n\n"
                 "The paid test is here:\n"
                 "{packet_checkout_url}\n\n"
-                "If you want me to look at fit first, send the rough note here:\n"
-                "{notes_url}\n\n"
+                "If you want me to look at fit first, just reply with the rough note.\n\n"
                 "Sample format:\n"
                 "{sample_url}\n\n"
                 "- Alan"
@@ -295,8 +294,7 @@ STEP_TEMPLATE_VARIANTS: dict[str, list[StepTemplate]] = {
                 "This is for one stalled opportunity, not a software rollout.\n\n"
                 "Start the paid test:\n"
                 "{packet_checkout_url}\n\n"
-                "If you want me to check fit first, send the rough notes:\n"
-                "{notes_url}\n\n"
+                "If you want me to check fit first, just reply with the rough notes.\n\n"
                 "- Alan"
             ),
             delay_after_prev_days=0,
@@ -566,12 +564,16 @@ def _landing_page_url() -> str:
         or "nalalalan.github.io/alan-operator-site" in lower_url
         or lower_url in {"https://relay.aolabs.io", "http://relay.aolabs.io"}
     ):
-        return "http://relaybrief.com"
+        return "https://relaybrief.com"
     return normalized
 
 
 def _sample_url() -> str:
-    return _landing_page_url().rstrip("/") + "/sample.pdf"
+    return (
+        os.getenv("RELAY_SAMPLE_URL", "").strip()
+        or os.getenv("SAMPLE_PDF_URL", "").strip()
+        or "https://raw.githubusercontent.com/nalalalan/relay-live/main/sample.pdf"
+    )
 
 
 def _notes_url() -> str:

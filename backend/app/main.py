@@ -46,6 +46,8 @@ apply_relay_reply_autoclose_patch()
 
 def _cors_origins() -> list[str]:
     defaults = [
+        "https://relaybrief.com",
+        "https://www.relaybrief.com",
         "https://relay.aolabs.io",
         "https://www.relay.aolabs.io",
         "https://nalalalan.github.io",

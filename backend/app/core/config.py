@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     fulfillment_domain: str = "mail.aolabs.io"
     from_email_outbound: str = "Alan @ AO Labs <hello@mail.aolabs.io>"
     from_email_fulfillment: str = "Alan @ AO Labs <hello@mail.aolabs.io>"
-    landing_page_url: str = "http://relaybrief.com"
+    landing_page_url: str = "https://relaybrief.com"
     reply_to_email: str = "alan@aolabs.io"
 
     smartlead_campaign_id: str = ""

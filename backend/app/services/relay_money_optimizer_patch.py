@@ -449,12 +449,16 @@ def _prospect_variant(sent_events: list[Any], fallback_variant: str) -> str:
 def _landing_page_url() -> str:
     url = os.getenv("LANDING_PAGE_URL", "").strip() or settings.landing_page_url.strip()
     if not url or "nalalalan.github.io/alan-operator-site" in url:
-        return "https://relay.aolabs.io"
+        return "https://relaybrief.com"
     return url.rstrip("/")
 
 
 def _sample_url() -> str:
-    return _landing_page_url().rstrip("/") + "/sample.pdf"
+    return (
+        os.getenv("RELAY_SAMPLE_URL", "").strip()
+        or os.getenv("SAMPLE_PDF_URL", "").strip()
+        or "https://raw.githubusercontent.com/nalalalan/relay-live/main/sample.pdf"
+    )
 
 
 def _notes_url() -> str:
