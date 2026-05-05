@@ -396,7 +396,7 @@ def _success_governor_contract(
         state = "rotate_experiment"
         next_step = money_decision.get("next_action") or "rotate one controlled variable"
         human_policy = "stay out unless rotation fails or a buyer signal appears"
-    elif money_state == "collect_sample" and window_state in {"waiting_for_window", "window_open"}:
+    elif money_state == "collect_sample" and window_state in {"waiting_for_capacity", "waiting_for_window", "window_open"}:
         state = "run_next_send_window"
         next_step = window_contract.get("success_criterion") or launch_readiness.get("next_window_success_criterion") or money_decision.get("next_action")
         human_policy = "stay out until the audit time unless replies, payment, or health changes"
@@ -733,6 +733,8 @@ def _window_execution_state(
     if active_remaining <= 0:
         return "sample_complete"
     if expected_next_window_sends <= 0:
+        if cap_remaining <= 0 and active_due > 0:
+            return "waiting_for_capacity"
         return "blocked"
     if reason == "open":
         return "window_open"
@@ -927,6 +929,8 @@ def _launch_readiness_contract(
             f"send {expected_next_window_sends} active leads and move progress "
             f"from {active_sends}/{active_target} to {expected_progress_after_next_window}"
         )
+    elif active_remaining > 0 and cap_remaining <= 0 and active_due > 0:
+        next_window_success_criterion = "wait for daily send capacity to reset"
     elif active_remaining > 0:
         next_window_success_criterion = "make queued active leads and send capacity available"
     else:
@@ -951,6 +955,8 @@ def _launch_readiness_contract(
             f"after audit time, interrupt if fewer than {expected_next_window_sends} active sends completed "
             "or the window closes with queued active leads and unused capacity"
         )
+    elif cap_remaining <= 0 and active_due > 0:
+        window_execution_failure_condition = "wait for daily send capacity to reset; interrupt only if the next fresh window still has no capacity"
     else:
         window_execution_failure_condition = "interrupt if the loop cannot create queued active leads or send capacity"
 

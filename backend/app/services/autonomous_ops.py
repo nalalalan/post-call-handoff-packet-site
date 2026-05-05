@@ -2471,6 +2471,8 @@ def _ao_digest_window_execution_state(
     if active_remaining <= 0:
         return "sample_complete"
     if expected_next_window_sends <= 0:
+        if cap_remaining <= 0 and active_due > 0:
+            return "waiting_for_capacity"
         return "blocked"
     if reason == "open":
         return "window_open"
@@ -2528,6 +2530,8 @@ def _ao_digest_launch_readiness(
             f"send {expected_next_window_sends} active leads and move progress "
             f"from {active_sends}/{active_target} to {expected_progress_after_next_window}"
         )
+    elif active_remaining > 0 and cap_remaining <= 0 and active_due > 0:
+        next_window_success_criterion = "wait for daily send capacity to reset"
     elif active_remaining > 0:
         next_window_success_criterion = "make queued active leads and send capacity available"
     else:
@@ -2543,6 +2547,10 @@ def _ao_digest_launch_readiness(
         window_execution_failure_condition = (
             f"after audit time, interrupt if fewer than {expected_next_window_sends} active sends completed "
             "or the window closes with queued active leads and unused capacity"
+        )
+    elif cap_remaining <= 0 and active_due > 0:
+        window_execution_failure_condition = (
+            "wait for daily send capacity to reset; interrupt only if the next fresh window still has no capacity"
         )
     else:
         window_execution_failure_condition = "interrupt if the loop cannot create queued active leads or send capacity"
