@@ -1112,6 +1112,10 @@ def optimized_send_due_sequence_messages(limit: int | None = None) -> dict[str, 
             paused_generic = len(generic_due)
 
         active_sample_needed = max(experiment_sample_target - active_variant_sends, 0)
+        active_sample_complete = active_sample_needed <= 0
+        active_first_touch_candidates = [candidate for candidate in candidates if candidate[3]]
+        if active_sample_complete and active_first_touch_candidates:
+            candidates = [candidate for candidate in candidates if not candidate[3]]
         active_direct_first_touch = [candidate for candidate in direct_due if candidate[3]]
         active_generic_first_touch = [candidate for candidate in generic_due if candidate[3]]
         generic_sample_cap = _active_generic_sample_cap()
@@ -1140,6 +1144,9 @@ def optimized_send_due_sequence_messages(limit: int | None = None) -> dict[str, 
         for prospect, step, candidate_variant, is_active_experiment_new in candidates:
             if sent >= limit or remaining_cap <= 0:
                 break
+            if is_active_experiment_new and active_sample_complete:
+                skipped += 1
+                continue
 
             try:
                 sent_events = outreach._sent_events_for_prospect(session, prospect.external_id)
@@ -1217,6 +1224,9 @@ def optimized_send_due_sequence_messages(limit: int | None = None) -> dict[str, 
             "active_experiment_allowed_generic_new_due_count": generic_active_sample_fallback_count,
             "active_experiment_generic_sample_daily_cap": generic_sample_cap,
             "active_generic_sample_fallback_count": generic_active_sample_fallback_count,
+            "active_first_touch_blocked_after_sample_complete": len(active_first_touch_candidates)
+            if active_sample_complete
+            else 0,
             "active_sample_reserved_only": active_sample_reserved_only,
             "fill_remaining_cap_after_active_sample": fill_remaining_after_active_sample,
             "money_fill_after_active_sample_count": money_fill_after_active_sample_count,
