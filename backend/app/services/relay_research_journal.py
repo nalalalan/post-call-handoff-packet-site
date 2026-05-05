@@ -127,10 +127,54 @@ def _compact_snapshot(success: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _decision_ledger(
+    *,
+    source: str,
+    money: dict[str, Any],
+    decision: dict[str, Any],
+    evidence: dict[str, Any],
+) -> dict[str, Any]:
+    status_after = _as_dict(evidence.get("status_after"))
+    active_progress = (
+        evidence.get("active_sample_progress_after")
+        or status_after.get("active_experiment_progress")
+        or (
+            f"{_safe_int(status_after.get('active_experiment_sample_sends') or status_after.get('active_experiment_sends'))}/"
+            f"{_safe_int(status_after.get('active_experiment_sample_target'))}"
+            if status_after.get("active_experiment_sample_target") is not None
+            else ""
+        )
+    )
+    return {
+        "source": source,
+        "money_truth": money.get("money_truth"),
+        "gross_usd": money.get("gross_usd"),
+        "payments": money.get("payments"),
+        "bottleneck": decision.get("after_bottleneck") or decision.get("bottleneck"),
+        "decision": decision.get("primary_action") or decision.get("after_next_action") or decision.get("next_action"),
+        "why": decision.get("proof_health_reason") or status_after.get("next_money_move") or "",
+        "next_action": decision.get("after_next_action") or decision.get("next_action") or decision.get("primary_action"),
+        "owner_policy": decision.get("owner_policy"),
+        "owner_interrupt": bool(decision.get("owner_interrupt")),
+        "proof_state": decision.get("proof_state"),
+        "proof_deadline": decision.get("proof_deadline"),
+        "active_experiment_variant": status_after.get("active_experiment_variant"),
+        "active_progress": active_progress,
+        "sent_this_tick": _safe_int(evidence.get("sent_this_tick")),
+        "replies": _safe_int(evidence.get("replies")),
+        "unhandled_replies": _safe_int(evidence.get("unhandled_replies")),
+        "cap_remaining": status_after.get("cap_remaining"),
+        "next_money_move": status_after.get("next_money_move") or "",
+    }
+
+
 def build_success_control_journal_entry(result: dict[str, Any]) -> dict[str, Any]:
     money = _money_from_success(result)
     decision = _compact_decision(result)
-    evidence = _compact_snapshot(result)
+    evidence = {
+        "money": money,
+        **_compact_snapshot(result),
+    }
     actions = _as_dict(result.get("actions"))
     conversion_actions = _as_dict(result.get("conversion_actions"))
     action_failures = _as_dict(result.get("action_failures"))
@@ -151,11 +195,14 @@ def build_success_control_journal_entry(result: dict[str, Any]) -> dict[str, Any
             "primary_action": decision.get("primary_action"),
             "proof_deadline": decision.get("proof_deadline"),
         },
+        "decision_ledger": _decision_ledger(
+            source="success_control",
+            money=money,
+            decision=decision,
+            evidence=evidence,
+        ),
         "decision": decision,
-        "evidence": {
-            "money": money,
-            **evidence,
-        },
+        "evidence": evidence,
         "actions": {
             name: _status_label(action)
             for name, action in actions.items()
@@ -191,6 +238,34 @@ def build_money_loop_journal_entry(result: dict[str, Any]) -> dict[str, Any]:
         f"active={active_progress} proof={result.get('active_sample_tick_proof_state')} "
         f"next={decision.get('primary_action') or decision.get('after_next_action') or decision.get('next_action')}"
     )
+    evidence = {
+        "money": money,
+        "sent_this_tick": _safe_int(result.get("sent_this_tick")),
+        "active_sample_sends_before": _safe_int(result.get("active_sample_sends_before")),
+        "active_sample_sends_after": _safe_int(result.get("active_sample_sends_after")),
+        "active_sample_delta_this_tick": _safe_int(result.get("active_sample_delta_this_tick")),
+        "active_sample_expected_delta_this_tick": _safe_int(result.get("active_sample_expected_delta_this_tick")),
+        "active_sample_tick_proof_state": result.get("active_sample_tick_proof_state"),
+        "active_sample_progress_after": active_progress,
+        "sendable_due_before": _safe_int(result.get("sendable_due_before")),
+        "sendable_due_mode": result.get("sendable_due_mode"),
+        "direct_due_before": _safe_int(result.get("direct_due_before")),
+        "active_experiment_new_due_before": _safe_int(result.get("active_experiment_new_due_before")),
+        "cap_remaining_before": _safe_int(result.get("cap_remaining_before")),
+        "status_after": {
+            "active_experiment_variant": status_after.get("active_experiment_variant"),
+            "active_experiment_sends": status_after.get("active_experiment_sends"),
+            "active_experiment_sample_sends": status_after.get("active_experiment_sample_sends"),
+            "active_experiment_sample_sends_observed": status_after.get("active_experiment_sample_sends_observed"),
+            "active_experiment_sample_target": status_after.get("active_experiment_sample_target"),
+            "active_experiment_new_due_count": status_after.get("active_experiment_new_due_count"),
+            "direct_due_count": status_after.get("direct_due_count"),
+            "cap_remaining": status_after.get("cap_remaining"),
+            "send_window_reason": status_after.get("send_window_reason"),
+            "send_window_next_open_local": status_after.get("send_window_next_open_local"),
+            "next_money_move": status_after.get("next_money_move"),
+        },
+    }
     return {
         "version": RELAY_RESEARCH_JOURNAL_VERSION,
         "source": "money_loop",
@@ -201,35 +276,14 @@ def build_money_loop_journal_entry(result: dict[str, Any]) -> dict[str, Any]:
             "primary_action": decision.get("primary_action"),
             "proof_deadline": decision.get("proof_deadline"),
         },
+        "decision_ledger": _decision_ledger(
+            source="money_loop",
+            money=money,
+            decision=decision,
+            evidence=evidence,
+        ),
         "decision": decision,
-        "evidence": {
-            "money": money,
-            "sent_this_tick": _safe_int(result.get("sent_this_tick")),
-            "active_sample_sends_before": _safe_int(result.get("active_sample_sends_before")),
-            "active_sample_sends_after": _safe_int(result.get("active_sample_sends_after")),
-            "active_sample_delta_this_tick": _safe_int(result.get("active_sample_delta_this_tick")),
-            "active_sample_expected_delta_this_tick": _safe_int(result.get("active_sample_expected_delta_this_tick")),
-            "active_sample_tick_proof_state": result.get("active_sample_tick_proof_state"),
-            "active_sample_progress_after": active_progress,
-            "sendable_due_before": _safe_int(result.get("sendable_due_before")),
-            "sendable_due_mode": result.get("sendable_due_mode"),
-            "direct_due_before": _safe_int(result.get("direct_due_before")),
-            "active_experiment_new_due_before": _safe_int(result.get("active_experiment_new_due_before")),
-            "cap_remaining_before": _safe_int(result.get("cap_remaining_before")),
-            "status_after": {
-                "active_experiment_variant": status_after.get("active_experiment_variant"),
-                "active_experiment_sends": status_after.get("active_experiment_sends"),
-                "active_experiment_sample_sends": status_after.get("active_experiment_sample_sends"),
-                "active_experiment_sample_sends_observed": status_after.get("active_experiment_sample_sends_observed"),
-                "active_experiment_sample_target": status_after.get("active_experiment_sample_target"),
-                "active_experiment_new_due_count": status_after.get("active_experiment_new_due_count"),
-                "direct_due_count": status_after.get("direct_due_count"),
-                "cap_remaining": status_after.get("cap_remaining"),
-                "send_window_reason": status_after.get("send_window_reason"),
-                "send_window_next_open_local": status_after.get("send_window_next_open_local"),
-                "next_money_move": status_after.get("next_money_move"),
-            },
-        },
+        "evidence": evidence,
         "actions": {
             "refill": _status_label(result.get("refill_result")),
             "outreach": _status_label(result.get("outreach_result")),
