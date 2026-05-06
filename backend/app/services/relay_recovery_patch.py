@@ -246,7 +246,7 @@ def _sample_url() -> str:
     return (
         os.getenv("RELAY_SAMPLE_URL", "").strip()
         or os.getenv("SAMPLE_PDF_URL", "").strip()
-        or "https://raw.githubusercontent.com/nalalalan/relay-live/main/sample.pdf"
+            or "https://relay.aolabs.io/sample.pdf"
     )
 
 

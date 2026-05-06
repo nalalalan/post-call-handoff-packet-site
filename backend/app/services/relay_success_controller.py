@@ -831,7 +831,7 @@ def _outbound_smoke_urls(outreach_service: Any) -> dict[str, str]:
         "sample_url": getattr(
             outreach_service,
             "_sample_url",
-            lambda: "https://raw.githubusercontent.com/nalalalan/relay-live/main/sample.pdf",
+            lambda: "https://relay.aolabs.io/sample.pdf",
         )(),
         "notes_url": landing_page_url + "/#send-notes",
     }

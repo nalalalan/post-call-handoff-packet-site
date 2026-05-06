@@ -79,7 +79,7 @@ def _normalize_buyer_payload(payload: dict[str, Any]) -> dict[str, str]:
 def _sample_pdf_url() -> str:
     return (
         getattr(settings, "sample_pdf_url", "")
-        or "https://raw.githubusercontent.com/nalalalan/relay-live/main/sample.pdf"
+            or "https://relay.aolabs.io/sample.pdf"
     )
 
 
