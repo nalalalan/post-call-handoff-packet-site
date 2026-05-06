@@ -2047,6 +2047,17 @@ def relay_evidence_export(days: int = 90, limit: int = 200) -> dict[str, Any]:
             .limit(limit)
             .all()
         )
+        now = datetime.utcnow()
+
+        def rolling_event_counts(window_days: int) -> dict[str, int]:
+            window_since = now - timedelta(days=window_days)
+            rows = (
+                db.query(RelayIntentEvent.event_type, func.count(RelayIntentEvent.id))
+                .filter(RelayIntentEvent.created_at >= window_since)
+                .group_by(RelayIntentEvent.event_type)
+                .all()
+            )
+            return {name or "unknown": int(count) for name, count in rows}
 
         def clean_day(value: Any) -> str:
             return value.isoformat() if hasattr(value, "isoformat") else str(value or "")
@@ -2059,6 +2070,79 @@ def relay_evidence_export(days: int = 90, limit: int = 200) -> dict[str, Any]:
         def metadata_keys(raw: str | None) -> list[str]:
             payload = _safe_payload(raw)
             return sorted(str(key)[:120] for key in payload.keys())
+
+        rolling_counts = {
+            "1d": rolling_event_counts(1),
+            "7d": rolling_event_counts(7),
+            "14d": rolling_event_counts(14),
+            "30d": rolling_event_counts(30),
+        }
+
+        def rolling_count(window: str, event_type: str) -> int:
+            return int(rolling_counts.get(window, {}).get(event_type, 0))
+
+        def round_rate(value: float) -> float:
+            return round(value, 3)
+
+        page_views_1d = rolling_count("1d", "page_view")
+        page_views_7d = rolling_count("7d", "page_view")
+        page_views_14d = rolling_count("14d", "page_view")
+        prior_6d_avg = max((page_views_7d - page_views_1d) / 6, 0.0)
+        prior_13d_avg = max((page_views_14d - page_views_1d) / 13, 0.0)
+        latest_day_views = 0
+        previous_day_views = 0
+        page_view_days = [
+            (clean_day(day), int(count))
+            for day, name, count in intent_rows
+            if (name or "") == "page_view"
+        ]
+        if page_view_days:
+            latest_day_views = page_view_days[-1][1]
+        if len(page_view_days) >= 2:
+            previous_day_views = page_view_days[-2][1]
+        positive_signals = []
+        if prior_6d_avg > 0 and page_views_1d > prior_6d_avg:
+            positive_signals.append(
+                {
+                    "signal": "page_views_1d_above_prior_6d_average",
+                    "is_success_signal": True,
+                    "current": page_views_1d,
+                    "baseline": round(prior_6d_avg, 2),
+                    "lift": round_rate(page_views_1d / prior_6d_avg),
+                    "interpretation": "top_of_funnel_attention_improved",
+                }
+            )
+        if prior_13d_avg > 0 and page_views_1d > prior_13d_avg:
+            positive_signals.append(
+                {
+                    "signal": "page_views_1d_above_prior_13d_average",
+                    "is_success_signal": True,
+                    "current": page_views_1d,
+                    "baseline": round(prior_13d_avg, 2),
+                    "lift": round_rate(page_views_1d / prior_13d_avg),
+                    "interpretation": "top_of_funnel_attention_improved",
+                }
+            )
+        if latest_day_views > previous_day_views:
+            positive_signals.append(
+                {
+                    "signal": "calendar_day_page_views_increased",
+                    "is_success_signal": True,
+                    "current": latest_day_views,
+                    "baseline": previous_day_views,
+                    "delta": latest_day_views - previous_day_views,
+                    "interpretation": "daily_attention_improved",
+                }
+            )
+        if rolling_count("1d", "sample_click") > 0:
+            positive_signals.append(
+                {
+                    "signal": "sample_clicks_present_1d",
+                    "is_success_signal": True,
+                    "current": rolling_count("1d", "sample_click"),
+                    "interpretation": "some_visitors_are_inspecting_the_offer",
+                }
+            )
 
         journal_entries = []
         ledger_entries = []
@@ -2110,6 +2194,21 @@ def relay_evidence_export(days: int = 90, limit: int = 200) -> dict[str, Any]:
                 "acquisition_event_counts": {name or "unknown": int(count) for name, count in acquisition_total_rows},
                 "prospect_status_counts": {status or "unknown": int(count) for status, count in prospect_status_rows},
                 "prospect_reply_state_counts": {state or "unknown": int(count) for state, count in prospect_reply_rows},
+            },
+            "rolling": {
+                "intent_event_counts": rolling_counts,
+            },
+            "positive_change": {
+                "has_positive_signal": bool(positive_signals),
+                "success_stage": "attention" if positive_signals else "none_detected",
+                "revenue_stage": "not_monetized_yet",
+                "signals": positive_signals,
+                "next_positive_changes_to_seek": [
+                    "more sample clicks",
+                    "more note-intake clicks",
+                    "real replies",
+                    "paid tests",
+                ],
             },
             "daily": {
                 "intent_event_counts": [
