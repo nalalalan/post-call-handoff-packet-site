@@ -1996,12 +1996,12 @@ def _bottleneck(snapshot: dict[str, Any]) -> str:
         return "outbound_window_missed"
     if _outbound_send_window_underfilled(outreach):
         return "outbound_window_underfilled"
+    if active_sample_complete_without_signal and bool(active_reply_observation.get("pending")):
+        return "active_sample_reply_window"
     if preempt_weak_zero_signal_lane:
         return "offer_market_rebuild_required"
     if repeated_no_signal:
         return "offer_market_rebuild_required"
-    if active_sample_complete_without_signal and bool(active_reply_observation.get("pending")):
-        return "active_sample_reply_window"
     if outreach.get("active_experiment_needs_sample"):
         if int(outreach.get("active_experiment_new_due_count") or 0) > 0:
             return "active_experiment_sample"
