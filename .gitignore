@@ -20,3 +20,4 @@ manuscripts/**/rendered/
 !manuscripts/relay_nature_style/
 !manuscripts/relay_nature_style/figures/
 !manuscripts/relay_nature_style/figures/relay-*.png
+_research_logs/
