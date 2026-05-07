@@ -138,20 +138,20 @@
 \end{center}
 
 \vspace{0.35em}
-\noindent\textbf{Autonomous agents are increasingly able to use tools, write messages, and execute workflows, but deployed claims of autonomy are difficult to evaluate when actions, constraints, market signals, and commercial outcomes are scattered across product analytics and human memory. We report Relay, an evidence-locked deployment of a notes-first revenue agent governed by an explicit proof contract. The system converts a broad commercial goal into a state machine with recorded bottlenecks, permitted actions, forbidden actions, proof deadlines, buyer-intent signals, payment outcomes, and compact research-journal entries. At the evidence lock, Relay exposed nine production routes, had all eleven checked environment requirements present, retained 30-day telemetry including 56 page views, 8 link clicks, 3 checkout clicks, and 3 lead-capture events, and recorded four compact research-journal entries. Crucially, it had not yet demonstrated autonomous profitability: gross revenue was USD~0.00, non-test payments were zero, and the active hard-paid-test experiment was 0 of 10 sends before its next business-hour window. The contribution is therefore not a claim that the system already makes money. It is a falsifiable protocol for making autonomous commercial experimentation auditable enough that future success or failure can be interpreted.}
+\noindent\textbf{Autonomous agents are increasingly able to use tools, write messages, and execute workflows, but deployed claims of autonomy are difficult to evaluate when actions, constraints, market signals, and commercial outcomes are scattered across product analytics and human memory. We report Relay, a continuously updated deployment record for a notes-first revenue agent governed by an explicit proof contract. The system converts a broad commercial goal into a state machine with recorded bottlenecks, permitted actions, forbidden actions, proof deadlines, buyer-intent signals, payment outcomes, and compact research-journal entries. At the initial evidence lock, Relay exposed nine production routes, had all eleven checked environment requirements present, retained 30-day telemetry including 56 page views, 8 link clicks, 3 checkout clicks, and 3 lead-capture events, and recorded four compact research-journal entries. In the latest live check, the seven-day public-intent window contained 116 page views, 7 sample clicks, 3 note-intake clicks, 2 checkout clicks, and 1 lead, while the money state remained USD~0.00 with zero payments. The active experiment had reached 10 of 10 sends with zero replies and zero payments, and the controller was still observing the reply window. The contribution is therefore not a claim that the system already makes money. It is a falsifiable protocol for making autonomous commercial experimentation auditable enough that future success or failure can be interpreted.}
 
 \newpage
 \pagestyle{fancy}
 
 \section{Introduction}
 
-Autonomous software agents are moving from demonstrations into deployed settings where they can observe, decide, and act through external tools~\cite{yao_react_2023,schick_toolformer_2023,park_generative_2023,wu_autogen_2023,wang_survey_2023}. This creates a new evaluation problem. A tool-using system can appear autonomous because it sends messages, records data, or triggers payments, but a scientific claim of autonomy requires more than action. The system must preserve the state that justified action, the constraints that limited action, and the evidence that should update the next action.
+Autonomous software agents are moving from demonstrations into deployed settings where they can observe, decide, and act through external tools~\cite{yao_react_2023,schick_toolformer_2023,park_generative_2023,wu_autogen_2023,wang_survey_2023}. This creates a new evaluation problem. A tool-using system can appear autonomous because it sends messages, records data, or triggers payments, but a scientific claim of autonomy requires more than action. The system must preserve the state that justified action, the constraints that limited action, and the evidence that should update control.
 
 This requirement is familiar in closed-loop experimentation. In autonomic computing, a controller monitors, analyses, plans, and executes under an explicit knowledge model~\cite{kephart_vision_2003}. In closed-loop materials discovery, a system chooses the next experiment, records the result, and updates the search path~\cite{kusne_closed_loop_2020}. Commercial agent deployments need a related discipline, but with different risks: buyer privacy, outreach ethics, payment accounting, internal-test contamination, and human operator intervention. Without an explicit proof contract, a founder can repeatedly change the market, copy, price, or volume and still describe the whole process as one autonomous system.
 
-Relay was built around a deliberately narrow offer: a buyer sends messy sales-call notes and receives a client-ready follow-up packet. The user-facing product is simple, but the research object is broader. Relay connects a product surface, buyer-intent telemetry, payment links, intake capture, outbound acquisition records, production-event routes, a success governor, an autonomous money loop, and a research-journal endpoint. The system is designed to keep the operator out of routine replanning during a proof window while preserving enough evidence to reconstruct what happened.
+Relay was built around a deliberately narrow offer: a buyer sends messy sales-call notes and receives a client-ready follow-up packet. The user-facing product is simple, but the research object is broader. Relay connects a product surface, buyer-intent telemetry, payment links, intake capture, outbound acquisition records, production-event routes, a success governor, an autonomous money loop, and a research-journal endpoint. The system is designed to keep the operator out of routine replanning during a proof window while preserving enough evidence to reconstruct what happened. Paper-backed changes are now treated as part of the evidence system: when the dashboard, backend, report language, source graph, metrics, guardrails, or results change materially, the manuscript and public PDF must be updated in the same work cycle.
 
-Here we frame Relay as a proof-governed autonomy system. The term denotes a closed loop in which the agent can act only under a recorded proof state: a measurable objective, a current bottleneck, a permitted next action, a forbidden-action set, a deadline, and outcome fields that define whether the action succeeded. This paper is evidence-locked to a saved production snapshot rather than to a live dashboard that can change after drafting. The resulting claim is intentionally bounded. Relay is deployed and auditable; it is not yet proven profitable.
+Here we frame Relay as a proof-governed autonomy system. The term denotes a closed loop in which the agent can act only under a recorded proof state: a measurable objective, a current bottleneck, a permitted action, a forbidden-action set, a deadline, and outcome fields that define whether the action succeeded. This paper preserves the initial evidence lock and adds dated operating updates instead of replacing weak results with smoother language. The resulting claim is intentionally bounded. Relay is deployed and auditable; it is not yet proven profitable.
 
 \section{Results}
 
@@ -161,7 +161,7 @@ The Results are organised around four levels of the deployment: the proof-govern
 
 Relay converts an open-ended goal---make the system generate money while the operator stays out of the loop---into a constrained experiment. The proof contract contains five parts. First, a revenue objective defines the target outcome. Second, the state layer records money, payments, queue state, active-sample progress, send capacity, exception state, and recent market signals. Third, the success governor computes the bottleneck and selects the next allowed action. Fourth, the guardrail contract blocks actions that would make the experiment uninterpretable. Fifth, the research journal records the control tick and money-loop tick.
 
-At the evidence lock, the success state was \emph{active\_experiment\_sample}. The owner mode was \emph{out\_of\_loop\_waiting}. The allowed action was to send 10 active leads during the approved business-hour window. The forbidden set included asking the owner to choose the next move before the proof deadline, increasing volume before buyer signal, changing more than one major variable at a time, and declaring demand failure from an execution miss. This converts an emotionally loaded commercial objective into a narrow experimental state.
+At the evidence lock, the success state was \emph{active\_experiment\_sample}. The owner mode was \emph{out\_of\_loop\_waiting}. The allowed action was to send 10 active leads during the approved business-hour window. The forbidden set included asking the owner to choose copy, targeting, price, or volume before the proof deadline, increasing volume before buyer signal, changing more than one major variable at a time, and declaring demand failure from an execution miss. This converts an emotionally loaded commercial objective into a narrow experimental state.
 
 \begin{table}[tbp]
 \centering
@@ -179,7 +179,7 @@ Money state & USD~0.00 gross revenue; zero non-test payments & Prevents internal
 Bottleneck & Active hard-paid-test sample incomplete & Blocks premature judgement of demand. \\
 Allowed action & Send 10 active leads inside the approved cap and window & Completes the minimum exposure before interpreting signal. \\
 Forbidden actions & No owner-choice request, no volume increase, no multi-variable change, no failure claim from execution miss & Preserves causal interpretability. \\
-Audit point & 2026-05-04T17:00:00-04:00 & Defines when the next evidence should be evaluated. \\
+Audit point & 2026-05-04T17:00:00-04:00 & Defines when the window should be evaluated. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -260,7 +260,7 @@ The primary endpoint for the next window is non-test paid purchase count and gro
 \begin{tabularx}{\textwidth}{L{0.25\textwidth}Y Y}
 \toprule
 \rowcolor{ClayLine}
-\textbf{Observed outcome} & \textbf{Interpretation} & \textbf{Permitted next action} \\
+\textbf{Observed outcome} & \textbf{Interpretation} & \textbf{Permitted operation} \\
 \midrule
 Paid test or strong buyer reply & The lane has buyer signal. & Fulfil, preserve the lane, and continue only within the current cap. \\
 Checkout clicks without payment & Friction may be in price, trust, or checkout path. & Change one variable and run another small sample. \\
@@ -271,9 +271,39 @@ Manual owner intervention & Experiment becomes contaminated. & Mark the window a
 \end{tabularx}
 \end{table}
 
+\subsection{Current operating state}
+
+The latest live check was read from the production Relay API at approximately 2026-05-07T02:00Z. It updates the paper beyond the initial May 4 evidence lock without changing the interpretation standard. The system has more observed intent than the initial snapshot, but it still has no revenue. The active experiment \texttt{stalled\_opportunity\_direct} recorded 10 of 10 sends between 2026-05-06T13:30:11Z and 2026-05-06T13:30:18Z, with 0 replies, 0 payments, and 0 send failures. The reply-observation window remained pending until 2026-05-07T13:30:18Z, so the paper records the current state as incomplete commercial proof rather than demand failure or success.
+
+\begin{table}[tbp]
+\centering
+\small
+\caption{Current Relay state from the live production API. Values are operational state, not a hiring, market, or profitability probability.}
+\label{tab:current_state}
+\rowcolors{2}{RelayPale}{white}
+\begin{tabularx}{\textwidth}{L{0.27\textwidth}Y}
+\toprule
+\rowcolor{ClayLine}
+\textbf{Field} & \textbf{Live value} \\
+\midrule
+One-day intent & 52 page views, 63 page-engagement events, 12 showcase-engagement events, 3 sample clicks, 0 leads. \\
+Seven-day intent & 116 page views, 7 sample clicks, 3 note-intake clicks, 2 checkout clicks, 1 lead. \\
+Revenue & USD~0.00 gross revenue; 0 payments. \\
+Rolling outbound & 60 sends over seven days; 0 replies; 0 payments; 0 send failures. \\
+Active experiment & \texttt{stalled\_opportunity\_direct}; 10/10 sends observed; 0 replies; 0 payments. \\
+Controller state & The top-level bottleneck was \texttt{outbound\_window\_missed}, while the active-experiment decision was \texttt{observing\_reply\_window}. This is recorded as a control-state inconsistency to resolve, not hidden by the manuscript. \\
+Public offer path & Landing page, sample PDF, checkout path, notes form, lead API, payment-webhook preflight, reply-autoclose preflight, and outbound preflight were reported as configured or OK. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Report language is part of the control surface}
+
+On 2026-05-06, the operator-facing Relay report language was changed from directive best-move framing to current-state framing in the autonomous operations summaries and related close-path/proposal text. This is not cosmetic. A system-owned operation should report state and current control logic without making the human operator read a task list for actions that the system should already own. The change is recorded here because paper-backed operational systems must keep their manuscripts aligned with meaningful dashboard, backend, and report-surface changes.
+
 \subsection{Compact journaling makes the system publishable as a research object}
 
-Before the journal layer, Relay could be monitored, but later reconstruction required multiple routes and human memory. The research-journal endpoint changes the status of the deployment because the system now records compact control entries. These entries are not motivational notes; they are evidence objects. They preserve the money state, active-sample progress, proof state, health state, and next action.
+Before the journal layer, Relay could be monitored, but later reconstruction required multiple routes and human memory. The research-journal endpoint changes the status of the deployment because the system now records compact control entries. These entries preserve the money state, active-sample progress, proof state, health state, and current operation.
 
 \begin{table}[tbp]
 \centering
@@ -296,17 +326,17 @@ Before the journal layer, Relay could be monitored, but later reconstruction req
 
 \section{Discussion}
 
-Relay is not yet evidence that an autonomous agent can make money without an operator. It is evidence that an autonomous commercial experiment can be constrained and logged so that a later money claim would be auditable. That is the stronger contribution. The system's most important result is the discipline of refusing to count an internal test as revenue, refusing to judge demand before the active sample, and refusing to change many variables at once.
+Relay is not yet evidence that an autonomous agent can make money without an operator. It is evidence that an autonomous commercial experiment can be constrained and logged so that a later money claim would be auditable. That is the stronger contribution. The system's most important result is the discipline of refusing to count an internal test as revenue, refusing to judge demand before the active sample and reply-observation window mature, and refusing to change many variables at once.
 
 The broader implication is that agentic systems need proof contracts when deployed in domains with real-world consequences. A proof contract makes autonomy less theatrical and more scientific. It identifies what the system may do, what it must not do, when the result can be judged, and what evidence changes the next state. This structure could apply beyond Relay to other live agent deployments where market response, human intervention, or hidden tool actions make claims difficult to interpret.
 
-The current deployment remains preliminary. It is a single system, a single offer, and a small descriptive dataset. It contains zero real revenue at the evidence lock. It does not provide inferential statistics, external replication, or a mature ethics protocol. A Nature-level version of this work would need repeated journaled rotations, non-test buyer outcomes, a comparison with manual or dashboard-only operation, a privacy-preserving dataset, independent review of code and logs, and a clear institutional position on commercial outreach and data retention.
+The current deployment remains preliminary. It is a single system, a single offer, and a small descriptive dataset. It contains zero real revenue at the initial evidence lock and zero real revenue in the latest live check. It does not provide inferential statistics, external replication, or a mature ethics protocol. A Nature-level version of this work would need repeated journaled rotations, non-test buyer outcomes, a comparison with manual or dashboard-only operation, a privacy-preserving dataset, independent review of code and logs, a clear institutional position on commercial outreach and data retention, and resolution of the control-state inconsistency between the top-level bottleneck and the active-experiment decision state.
 
 \section{Methods}
 
 \subsection{Evidence lock and data sources}
 
-The manuscript is locked to three saved production snapshots: \texttt{\seqsplit{relay\_ops\_snapshot\_2026-05-04T0042.json}}, \texttt{\seqsplit{relay\_journal\_snapshot\_2026-05-04T0042.json}}, and \texttt{\seqsplit{relay\_intent\_snapshot\_2026-05-04T0042.json}}. The code state used for the evidence lock was commit \texttt{\seqsplit{be6d9104aebd10dcf42b03d54f2d0ce1b8a9043b}} in repository \texttt{nalalalan/relay-app}. Raw snapshots are retained locally for audit but are not reproduced in the public manuscript because they may contain operationally sensitive fields or personal identifiers.
+The initial manuscript lock used three saved production snapshots: \texttt{\seqsplit{relay\_ops\_snapshot\_2026-05-04T0042.json}}, \texttt{\seqsplit{relay\_journal\_snapshot\_2026-05-04T0042.json}}, and \texttt{\seqsplit{relay\_intent\_snapshot\_2026-05-04T0042.json}}. The code state used for the initial evidence lock was commit \texttt{\seqsplit{be6d9104aebd10dcf42b03d54f2d0ce1b8a9043b}} in repository \texttt{nalalalan/relay-app}. The current-state update was read from live intent, ops, and journal routes in the production API. Raw snapshots and live responses are retained locally or in production systems for audit but are not reproduced in the public manuscript because they may contain operationally sensitive fields or personal identifiers.
 
 \subsection{Revenue accounting}
 
@@ -318,11 +348,15 @@ Intent was reported in two forms: all recorded intent events and filtered real-e
 
 \subsection{Autonomy policy}
 
-The autonomy policy was read from the success-controller and money-system summaries. The policy defines the current bottleneck, allowed next action, forbidden actions, proof deadline, owner-interruption state, and recovery conditions. These values are treated as experimental controls. A future protocol deviation should be recorded in the journal before the corresponding outcome is interpreted.
+The autonomy policy was read from the success-controller and money-system summaries. The policy defines the current bottleneck, allowed operation, forbidden actions, proof deadline, owner-interruption state, and recovery conditions. These values are treated as experimental controls. A future protocol deviation should be recorded in the journal before the corresponding outcome is interpreted.
+
+\subsection{Paper continuity}
+
+Relay is now treated as a paper-backed operational system. Any substantive change to the dashboard, backend, report language, source graph, evidence model, metrics, guardrails, or results must update the manuscript source and public PDF in the same work cycle. A paper-backed change is incomplete until the PDF rebuilds and the public artifact exposes the revised record.
 
 \subsection{Statistics and sample size}
 
-No hypothesis test was performed. The available observations are descriptive: 56 page views, 18 filtered real page views, 8 link clicks, 3 checkout clicks, 3 lead-capture events, 1 filtered real lead, 60 rolling seven-day outbound sends, 0 replies, 0 payments, and 0 send failures. The active experiment target was 10 active sends, but the observed active sample at the evidence lock was 0. Future statistical claims require completed samples and a predeclared analysis plan.
+No hypothesis test was performed. The initial evidence-lock observations were descriptive: 56 page views, 18 filtered real page views, 8 link clicks, 3 checkout clicks, 3 lead-capture events, 1 filtered real lead, 60 rolling seven-day outbound sends, 0 replies, 0 payments, and 0 send failures. The latest live operating observations are also descriptive: 116 seven-day page views, 7 sample clicks, 3 note-intake clicks, 2 checkout clicks, 1 lead, 60 rolling seven-day outbound sends, 10/10 active-experiment sends, 0 replies, 0 payments, and 0 send failures. Future statistical claims require completed samples, matured observation windows, and a predeclared analysis plan.
 
 \subsection{AI assistance disclosure}
 
